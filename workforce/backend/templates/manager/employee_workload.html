@@ -1,0 +1,255 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Employee Workload</title>
+
+
+    <script
+        type="module"
+        src="https://js.arcgis.com/calcite-components/3.2.1/calcite.esm.js"
+    ></script>
+
+
+    <link
+        rel="stylesheet"
+        href="{% static 'manager/css/manager.css' %}"
+    >
+
+</head>
+
+
+<body>
+
+    <calcite-shell>
+
+
+        <!-- ==================================================
+             SIDE NAVIGATION
+        =================================================== -->
+
+        <calcite-shell-panel
+            slot="panel-start"
+            display-mode="float"
+        >
+
+            <calcite-action-bar>
+
+                <calcite-action
+                    icon="dashboard"
+                    text="Project Progress"
+                    onclick="window.location.href='/manager/projects/'"
+                ></calcite-action>
+
+
+                <calcite-action
+                    icon="organization"
+                    text="Employee Workload"
+                    active
+                ></calcite-action>
+
+            </calcite-action-bar>
+
+        </calcite-shell-panel>
+
+
+        <!-- ==================================================
+             HEADER
+        =================================================== -->
+
+        <calcite-navigation slot="header">
+
+            <calcite-navigation-logo
+                heading="Employee Workload"
+                description="GIS team monitoring"
+            ></calcite-navigation-logo>
+
+        </calcite-navigation>
+
+
+        <!-- ==================================================
+             CONTENT
+        =================================================== -->
+
+        <div class="manager-container">
+
+
+            <!-- ==================================================
+                 SUMMARY
+            =================================================== -->
+
+            <div class="summary-grid">
+
+
+                <calcite-card>
+
+                    <div slot="heading">
+                        GIS Users
+                    </div>
+
+                    <div
+                        id="total-employees"
+                        class="metric-value"
+                    >
+                        -
+                    </div>
+
+                </calcite-card>
+
+
+                <calcite-card>
+
+                    <div slot="heading">
+                        Assigned Grids
+                    </div>
+
+                    <div
+                        id="total-assigned-grids"
+                        class="metric-value"
+                    >
+                        -
+                    </div>
+
+                </calcite-card>
+
+
+                <calcite-card>
+
+                    <div slot="heading">
+                        Estimated Hours
+                    </div>
+
+                    <div
+                        id="total-estimated-hours"
+                        class="metric-value"
+                    >
+                        -
+                    </div>
+
+                </calcite-card>
+
+
+                <calcite-card>
+
+                    <div slot="heading">
+                        Completed KM
+                    </div>
+
+                    <div
+                        id="total-employee-km"
+                        class="metric-value"
+                    >
+                        -
+                    </div>
+
+                </calcite-card>
+
+            </div>
+
+
+            <!-- ==================================================
+                 EMPLOYEE TABLE
+            =================================================== -->
+
+            <calcite-card class="project-card">
+
+                <div slot="heading">
+                    Employee Workload
+                </div>
+
+                <div slot="description">
+                    Assigned workload and digitization progress
+                    for each GIS user.
+                </div>
+
+
+                <div class="table-container">
+
+                    <table class="manager-table">
+
+                        <thead>
+
+                            <tr>
+
+                                <th>
+                                    Employee
+                                </th>
+
+                                <th>
+                                    Assigned Grids
+                                </th>
+
+                                <th>
+                                    Estimated Hours
+                                </th>
+
+                                <th>
+                                    Working Days
+                                </th>
+
+                                <th>
+                                    Completed Grids
+                                </th>
+
+                                <th>
+                                    Completed KM
+                                </th>
+
+                                <th>
+                                    Progress
+                                </th>
+
+                                <th>
+                                    Status
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody id="employee-table-body">
+
+                            <tr>
+
+                                <td colspan="8">
+
+                                    <calcite-loader
+                                        active
+                                    ></calcite-loader>
+
+                                </td>
+
+                            </tr>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            </calcite-card>
+
+        </div>
+
+
+    <script
+        src="{% static 'manager/js/employee_workload.js' %}"
+    ></script>
+
+
+    </calcite-shell>
+
+</body>
+
+</html>

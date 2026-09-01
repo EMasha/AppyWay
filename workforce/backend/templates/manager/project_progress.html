@@ -1,0 +1,686 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Project Progress</title>
+
+    <!-- ==================================================
+         CALCITE
+    =================================================== -->
+
+    <script
+        type="module"
+        src="https://js.arcgis.com/calcite-components/3.2.1/calcite.esm.js"
+    ></script>
+
+
+    <!-- ==================================================
+         ARCGIS MAP
+    =================================================== -->
+
+    <link
+        rel="stylesheet"
+        href="https://js.arcgis.com/4.31/esri/themes/light/main.css"
+    >
+
+    <script src="https://js.arcgis.com/4.31/"></script>
+
+
+    <!-- ==================================================
+         PROJECT CSS
+    =================================================== -->
+
+    <link
+        rel="stylesheet"
+        href="{% static 'manager/css/manager.css' %}"
+    >
+
+</head>
+
+
+<body>
+
+    <calcite-shell>
+
+
+        <!-- ==================================================
+             ROW 1 — TOP NAVBAR
+        =================================================== -->
+
+        <calcite-navigation slot="header">
+
+            <calcite-navigation-logo
+                heading="Project Progress"
+                description="Overall project monitoring"
+            ></calcite-navigation-logo>
+
+        </calcite-navigation>
+
+
+        <!-- ==================================================
+             FILTER NAVBAR
+        =================================================== -->
+
+        <div
+            id="manager-filter-bar"
+            class="manager-filter-navbar"
+        >
+
+
+            <!-- Authority -->
+
+            <div class="manager-filter-group">
+
+                <label
+                    for="filter-authority"
+                    class="manager-filter-label"
+                >
+                    Authority
+                </label>
+
+                <calcite-select
+                    id="filter-authority"
+                    scale="s"
+                >
+
+                    <calcite-option value="">
+                        All Authorities
+                    </calcite-option>
+
+                </calcite-select>
+
+            </div>
+
+
+            <!-- Status -->
+
+            <div class="manager-filter-group">
+
+                <label
+                    for="filter-status"
+                    class="manager-filter-label"
+                >
+                    Status
+                </label>
+
+                <calcite-select
+                    id="filter-status"
+                    scale="s"
+                >
+
+                    <calcite-option value="">
+                        All Statuses
+                    </calcite-option>
+
+                    <calcite-option value="to_do">
+                        To Do
+                    </calcite-option>
+
+                    <calcite-option value="in_progress">
+                        In Progress
+                    </calcite-option>
+
+                    <calcite-option value="blocked">
+                        Blocked
+                    </calcite-option>
+
+                    <calcite-option value="done">
+                        Done
+                    </calcite-option>
+
+                </calcite-select>
+
+            </div>
+
+
+            <!-- Assigned User -->
+
+            <div class="manager-filter-group">
+
+                <label
+                    for="filter-user"
+                    class="manager-filter-label"
+                >
+                    Assigned User
+                </label>
+
+                <calcite-select
+                    id="filter-user"
+                    scale="s"
+                >
+
+                    <calcite-option value="">
+                        All Users
+                    </calcite-option>
+
+                </calcite-select>
+
+            </div>
+
+
+            <!-- Map Rendering -->
+
+            <div class="manager-filter-group map-render-filter">
+
+                <label
+                    for="map-render-mode"
+                    class="manager-filter-label"
+                >
+                    Map Rendering
+                </label>
+
+                <calcite-select
+                    id="map-render-mode"
+                    scale="s"
+                >
+
+                    <calcite-option
+                        value="status"
+                        selected
+                    >
+                        By Status
+                    </calcite-option>
+
+                    <calcite-option value="user">
+                        By User
+                    </calcite-option>
+
+                </calcite-select>
+
+            </div>
+
+
+            <!-- Clear -->
+
+            <div class="manager-filter-actions">
+
+                <calcite-button
+                    id="reset-filters"
+                    appearance="outline"
+                    scale="s"
+                    icon-start="reset"
+                >
+                    Clear
+                </calcite-button>
+
+            </div>
+
+        </div>
+
+
+        <!-- ==================================================
+             MAIN DASHBOARD
+        =================================================== -->
+
+        <main class="manager-container">
+
+
+            <!-- ==================================================
+                 ROW 2 — INDICATORS
+            =================================================== -->
+
+            <section class="indicators-section">
+
+                <div class="summary-grid">
+
+
+                    <!-- Authorities -->
+
+                    <calcite-card class="indicator-card">
+
+                        <div class="indicator-info">
+
+                            <div class="indicator-title">
+                                Authorities
+                            </div>
+
+                            <div class="metric-description">
+                                Total authorities
+                            </div>
+
+                        </div>
+
+                        <div
+                            id="total-authorities"
+                            class="metric-value"
+                        >
+                            -
+                        </div>
+
+                    </calcite-card>
+
+
+                    <!-- Total KM -->
+
+                    <calcite-card class="indicator-card">
+
+                        <div class="indicator-info">
+
+                            <div class="indicator-title">
+                                Total KM
+                            </div>
+
+                            <div class="metric-description">
+                                KM to digitize
+                            </div>
+
+                        </div>
+
+                        <div
+                            id="total-km"
+                            class="metric-value"
+                        >
+                            -
+                        </div>
+
+                    </calcite-card>
+
+
+                    <!-- Completed KM -->
+
+                    <calcite-card class="indicator-card">
+
+                        <div class="indicator-info">
+
+                            <div class="indicator-title">
+                                Completed KM
+                            </div>
+
+                            <div class="metric-description">
+                                Digitization completed
+                            </div>
+
+                        </div>
+
+                        <div
+                            id="completed-km"
+                            class="metric-value"
+                        >
+                            -
+                        </div>
+
+                    </calcite-card>
+
+
+                    <!-- Reviewed KM -->
+
+                    <calcite-card class="indicator-card">
+
+                        <div class="indicator-info">
+
+                            <div class="indicator-title">
+                                Reviewed KM
+                            </div>
+
+                            <div class="metric-description">
+                                KM reviewed
+                            </div>
+
+                        </div>
+
+                        <div
+                            id="reviewed-km"
+                            class="metric-value"
+                        >
+                            -
+                        </div>
+
+                    </calcite-card>
+
+
+                    <!-- Digitization -->
+
+                    <calcite-card class="indicator-card">
+
+                        <div class="indicator-info">
+
+                            <div class="indicator-title">
+                                Digitization
+                            </div>
+
+                            <div class="metric-description">
+                                Overall completion
+                            </div>
+
+                        </div>
+
+                        <div
+                            id="digitization-percentage"
+                            class="metric-value"
+                        >
+                            -
+                        </div>
+
+                    </calcite-card>
+
+
+                    <!-- Review -->
+
+                    <calcite-card class="indicator-card">
+
+                        <div class="indicator-info">
+
+                            <div class="indicator-title">
+                                Review
+                            </div>
+
+                            <div class="metric-description">
+                                Overall review progress
+                            </div>
+
+                        </div>
+
+                        <div
+                            id="review-percentage"
+                            class="metric-value"
+                        >
+                            -
+                        </div>
+
+                    </calcite-card>
+
+                </div>
+
+            </section>
+
+
+            <!-- ==================================================
+                 ROW 3 — MAP
+            =================================================== -->
+
+            <section class="map-section">
+
+                <calcite-card class="map-card">
+
+                    <div
+                        id="project-map"
+                        class="project-map"
+                    >
+
+                        <calcite-loader
+                            id="map-loader"
+                            active
+                        ></calcite-loader>
+
+                    </div>
+
+                </calcite-card>
+
+            </section>
+
+
+            <!-- ==================================================
+                 ROW 4 — TABLES
+            =================================================== -->
+
+            <section class="tables-section">
+
+                <calcite-card class="tables-card">
+
+                    <calcite-tabs>
+
+
+                        <!-- ==================================================
+                             TAB NAVIGATION
+                        =================================================== -->
+
+                        <calcite-tab-nav slot="title-group">
+
+                            <calcite-tab-title
+                                selected
+                                icon-start="organization"
+                            >
+                                Authorities
+                            </calcite-tab-title>
+
+                            <calcite-tab-title
+                                icon-start="grid"
+                            >
+                                Grids
+                            </calcite-tab-title>
+
+                            <calcite-tab-title
+                                icon-start="review"
+                            >
+                                Reviews
+                            </calcite-tab-title>
+
+                        </calcite-tab-nav>
+
+
+                        <!-- ==================================================
+                             AUTHORITIES
+                        =================================================== -->
+
+                        <calcite-tab>
+
+                            <div class="table-header">
+
+                                <div>
+
+                                    <h3>
+                                        Authority Progress
+                                    </h3>
+
+                                    <p>
+                                        Overall digitization and review
+                                        progress for each authority.
+                                    </p>
+
+                                </div>
+
+                            </div>
+
+
+                            <div class="table-container">
+
+                                <table class="manager-table">
+
+                                    <thead>
+
+                                        <tr>
+                                            <th>Authority</th>
+                                            <th>Grids</th>
+                                            <th>Total KM</th>
+                                            <th>Completed KM</th>
+                                            <th>Digitization %</th>
+                                            <th>Reviewed KM</th>
+                                            <th>Review %</th>
+                                            <th>Estimated Time</th>
+                                            <th>Schedule</th>
+                                        </tr>
+
+                                    </thead>
+
+
+                                    <tbody id="authority-table-body">
+
+                                        <tr>
+
+                                            <td colspan="9">
+
+                                                <calcite-loader
+                                                    active
+                                                ></calcite-loader>
+
+                                            </td>
+
+                                        </tr>
+
+                                    </tbody>
+
+                                </table>
+
+                            </div>
+
+                        </calcite-tab>
+
+
+                        <!-- ==================================================
+                             GRIDS
+                        =================================================== -->
+
+                        <calcite-tab>
+
+                            <div class="table-header">
+
+                                <div>
+
+                                    <h3>
+                                        Grid Progress
+                                    </h3>
+
+                                    <p>
+                                        Current status and assignment
+                                        of project grids.
+                                    </p>
+
+                                </div>
+
+                            </div>
+
+
+                            <div class="table-container">
+
+                                <table class="manager-table">
+
+                                    <thead>
+
+                                        <tr>
+                                            <th>Grid</th>
+                                            <th>Authority</th>
+                                            <th>Area</th>
+                                            <th>KM</th>
+                                            <th>Completed KM</th>
+                                            <th>Progress</th>
+                                            <th>Status</th>
+                                            <th>Assigned To</th>
+                                            <th>Start Date</th>
+                                            <th>Complete Date</th>
+                                            <th>Working Day</th>
+                                        </tr>
+
+                                    </thead>
+
+
+                                    <tbody id="grid-table-body">
+
+                                        <tr>
+
+                                            <td colspan="11">
+
+                                                <calcite-loader
+                                                    active
+                                                ></calcite-loader>
+
+                                            </td>
+
+                                        </tr>
+
+                                    </tbody>
+
+                                </table>
+
+                            </div>
+
+                        </calcite-tab>
+
+
+                        <!-- ==================================================
+                             REVIEWS
+                        =================================================== -->
+
+                        <calcite-tab>
+
+                            <div class="table-header">
+
+                                <div>
+
+                                    <h3>
+                                        Review Progress
+                                    </h3>
+
+                                    <p>
+                                        Review progress and burndown
+                                        against the planned schedule.
+                                    </p>
+
+                                </div>
+
+                            </div>
+
+
+                            <div class="table-container">
+
+                                <table class="manager-table">
+
+                                    <thead>
+
+                                        <tr>
+                                            <th>Authority</th>
+                                            <th>Day</th>
+                                            <th>KM Reviewed</th>
+                                            <th>Review %</th>
+                                            <th>Actual Burndown</th>
+                                            <th>Ideal Burndown</th>
+                                            <th>Difference</th>
+                                            <th>Status</th>
+                                        </tr>
+
+                                    </thead>
+
+
+                                    <tbody id="review-table-body">
+
+                                        <tr>
+
+                                            <td colspan="8">
+
+                                                <calcite-loader
+                                                    active
+                                                ></calcite-loader>
+
+                                            </td>
+
+                                        </tr>
+
+                                    </tbody>
+
+                                </table>
+
+                            </div>
+
+                        </calcite-tab>
+
+                    </calcite-tabs>
+
+                </calcite-card>
+
+            </section>
+
+        </main>
+
+    </calcite-shell>
+
+
+    <!-- ==================================================
+         PROJECT JAVASCRIPT
+    =================================================== -->
+
+    <script
+        src="{% static 'manager/js/project_progress.js' %}"
+    ></script>
+
+</body>
+
+</html>
