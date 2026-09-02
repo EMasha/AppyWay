@@ -1,0 +1,879 @@
+/* ==========================================================
+   GLOBAL
+========================================================== */
+
+html,
+body {
+
+    margin: 0;
+
+    padding: 0;
+
+    width: 100%;
+
+    height: 100%;
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    background: #f5f5f5;
+
+    overflow: hidden;
+
+}
+
+
+/* ==========================================================
+   CALCITE SHELL
+========================================================== */
+
+calcite-shell {
+
+    width: 100%;
+
+    height: 100%;
+
+}
+
+
+/* ==========================================================
+   MAIN CONTAINER
+========================================================== */
+
+.manager-container {
+
+    width: 100%;
+
+    height: 100%;
+
+    box-sizing: border-box;
+
+    padding: 8px 14px 10px 14px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 8px;
+
+    overflow: hidden;
+
+}
+
+
+/* ==========================================================
+   INDICATORS
+========================================================== */
+
+.indicators-section {
+
+    width: 100%;
+
+    flex-shrink: 0;
+
+}
+
+
+.summary-grid {
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(
+            6,
+            minmax(
+                100px,
+                1fr
+            )
+        );
+
+    gap: 8px;
+
+}
+
+
+/* ==========================================================
+   INDICATOR CARD
+========================================================== */
+
+.indicator-card {
+
+    min-height: 0;
+
+    height: 68px;
+
+    box-sizing: border-box;
+
+}
+
+
+/*
+ * Compact metric value.
+ */
+
+.metric-value {
+
+    font-size: 22px;
+
+    font-weight: 600;
+
+    line-height: 1.1;
+
+    margin-top: 3px;
+
+}
+
+
+/*
+ * Compact description.
+ */
+
+.metric-description {
+
+    color: #6a6a6a;
+
+    font-size: 11px;
+
+    line-height: 1.1;
+
+}
+
+
+/* ==========================================================
+   MAP SECTION
+========================================================== */
+
+.map-section {
+
+    width: 100%;
+
+    flex: 1 1 auto;
+
+    min-height: 0;
+
+}
+
+
+.map-card {
+
+    width: 100%;
+
+    height: 100%;
+
+}
+
+
+/* ==========================================================
+   MAP
+========================================================== */
+
+.project-map {
+
+    position: relative;
+
+    width: 100%;
+
+    height: 100%;
+
+    min-height: 250px;
+
+    overflow: hidden;
+
+}
+
+
+#project-map {
+
+    width: 100%;
+
+    height: 100%;
+
+}
+
+
+/* ==========================================================
+   MAP LOADER
+========================================================== */
+
+#map-loader {
+
+    position: absolute;
+
+    top: 50%;
+
+    left: 50%;
+
+    transform:
+        translate(
+            -50%,
+            -50%
+        );
+
+    z-index: 10;
+
+}
+
+
+/* ==========================================================
+   TABLE SECTION
+========================================================== */
+
+.tables-section {
+
+    width: 100%;
+
+    flex-shrink: 0;
+
+}
+
+
+.tables-card {
+
+    width: 100%;
+
+}
+
+
+/* ==========================================================
+   TABLE HEADER
+========================================================== */
+
+.table-header {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    padding:
+        4px
+        0
+        6px
+        0;
+
+}
+
+
+.table-header h3 {
+
+    margin: 0 0 2px 0;
+
+    font-size: 15px;
+
+}
+
+
+.table-header p {
+
+    margin: 0;
+
+    color: #6a6a6a;
+
+    font-size: 11px;
+
+}
+
+
+/* ==========================================================
+   TABLE
+========================================================== */
+
+.table-container {
+
+    width: 100%;
+
+    overflow-x: auto;
+
+    overflow-y: auto;
+
+    max-height: 260px;
+
+    border:
+        1px solid #e0e0e0;
+
+    border-radius: 4px;
+
+}
+
+
+/* ==========================================================
+   TABLE
+========================================================== */
+
+.manager-table {
+
+    width: 100%;
+
+    border-collapse: collapse;
+
+    min-width: 1000px;
+
+    background: #ffffff;
+
+}
+
+
+/* ==========================================================
+   TABLE HEADER
+========================================================== */
+
+.manager-table thead {
+
+    position: sticky;
+
+    top: 0;
+
+    z-index: 2;
+
+    background: #ffffff;
+
+}
+
+
+.manager-table th {
+
+    text-align: left;
+
+    font-weight: 600;
+
+    font-size: 11px;
+
+    padding:
+        6px
+        8px;
+
+    border-bottom:
+        2px solid #d8d8d8;
+
+    white-space: nowrap;
+
+}
+
+
+/* ==========================================================
+   TABLE CELLS
+========================================================== */
+
+.manager-table td {
+
+    padding:
+        6px
+        8px;
+
+    font-size: 11px;
+
+    border-bottom:
+        1px solid #eeeeee;
+
+    white-space: nowrap;
+
+}
+
+
+/* ==========================================================
+   TABLE HOVER
+========================================================== */
+
+.manager-table tbody tr:hover {
+
+    background: #f7f9fb;
+
+}
+
+
+/* ==========================================================
+   PROGRESS
+========================================================== */
+
+.progress-container {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 6px;
+
+}
+
+
+.progress-value {
+
+    min-width: 40px;
+
+    font-weight: 600;
+
+}
+
+
+/* ==========================================================
+   STATUS
+========================================================== */
+
+.status {
+
+    display: inline-block;
+
+    padding:
+        3px
+        7px;
+
+    border-radius: 10px;
+
+    font-size: 10px;
+
+    font-weight: 600;
+
+    white-space: nowrap;
+
+}
+
+
+.status-ahead {
+
+    background: #dff5e1;
+
+    color: #1b6e2b;
+
+}
+
+
+.status-behind {
+
+    background: #ffe1e1;
+
+    color: #a12626;
+
+}
+
+
+.status-on-track {
+
+    background: #e8e8e8;
+
+    color: #555555;
+
+}
+
+
+/* ==========================================================
+   GRID STATUS
+========================================================== */
+
+.status-to_do {
+
+    background: #eeeeee;
+
+    color: #555555;
+
+}
+
+
+.status-in_progress {
+
+    background: #e1efff;
+
+    color: #1769aa;
+
+}
+
+
+.status-done {
+
+    background: #dff5e1;
+
+    color: #1b6e2b;
+
+}
+
+
+.status-blocked {
+
+    background: #ffe1e1;
+
+    color: #a12626;
+
+}
+
+
+/* ==========================================================
+   CALCITE TABS
+========================================================== */
+
+calcite-tabs {
+
+    width: 100%;
+
+}
+
+
+calcite-tab-nav {
+
+    border-bottom:
+        1px solid #dddddd;
+
+}
+
+
+/* ==========================================================
+   TAB CONTENT
+========================================================== */
+
+calcite-tab {
+
+    padding-top: 8px;
+
+}
+
+
+/* ==========================================================
+   EMPTY / LOADING TABLE
+========================================================== */
+
+.manager-table td calcite-loader {
+
+    display: block;
+
+    margin: 6px auto;
+
+}
+
+
+/* ==========================================================
+   FILTER NAVBAR
+========================================================== */
+
+.manager-filter-navbar {
+
+    display: flex;
+
+    align-items: flex-end;
+
+    gap: 8px;
+
+    padding:
+        6px
+        12px;
+
+    background: #ffffff;
+
+    border-bottom:
+        1px solid #e5e7eb;
+
+    box-shadow:
+        0 1px 2px rgba(
+            0,
+            0,
+            0,
+            0.05
+        );
+
+    flex-wrap: nowrap;
+
+    flex-shrink: 0;
+
+}
+
+
+.manager-filter-group {
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 3px;
+
+    min-width: 150px;
+
+}
+
+
+.manager-filter-group.map-render-filter {
+
+    min-width: 160px;
+
+}
+
+
+.manager-filter-label {
+
+    font-size: 0.65rem;
+
+    font-weight: 600;
+
+    color: #4b5563;
+
+    text-transform: uppercase;
+
+    letter-spacing: 0.03em;
+
+}
+
+
+.manager-filter-actions {
+
+    display: flex;
+
+    align-items: center;
+
+    margin-left: auto;
+
+}
+
+
+/* ==========================================================
+   DESKTOP / LAPTOP
+========================================================== */
+
+@media (
+    max-height: 900px
+) {
+
+    .manager-container {
+
+        padding:
+            6px
+            12px
+            8px
+            12px;
+
+        gap: 6px;
+
+    }
+
+
+    .indicator-card {
+
+        height: 62px;
+
+    }
+
+
+    .metric-value {
+
+        font-size: 20px;
+
+    }
+
+
+    .metric-description {
+
+        font-size: 10px;
+
+    }
+
+
+    .table-container {
+
+        max-height: 220px;
+
+    }
+
+}
+
+
+/* ==========================================================
+   SMALL DESKTOP
+========================================================== */
+
+@media (
+    max-width: 1200px
+) {
+
+    .summary-grid {
+
+        grid-template-columns:
+            repeat(
+                3,
+                minmax(
+                    100px,
+                    1fr
+                )
+            );
+
+    }
+
+
+    .manager-filter-navbar {
+
+        flex-wrap: wrap;
+
+    }
+
+}
+
+
+/* ==========================================================
+   TABLET
+========================================================== */
+
+@media (
+    max-width: 900px
+) {
+
+    html,
+    body {
+
+        overflow: auto;
+
+    }
+
+
+    .manager-container {
+
+        height: auto;
+
+        padding:
+            10px;
+
+        gap: 10px;
+
+        overflow: visible;
+
+    }
+
+
+    .summary-grid {
+
+        grid-template-columns:
+            repeat(
+                2,
+                1fr
+            );
+
+    }
+
+
+    .indicator-card {
+
+        height: 65px;
+
+    }
+
+
+    .project-map {
+
+        height: 400px;
+
+    }
+
+
+    .manager-filter-navbar {
+
+        align-items: stretch;
+
+        flex-wrap: wrap;
+
+    }
+
+
+    .manager-filter-group {
+
+        flex:
+            1 1 180px;
+
+    }
+
+
+    .manager-filter-actions {
+
+        margin-left: 0;
+
+    }
+
+}
+
+
+/* ==========================================================
+   MOBILE
+========================================================== */
+
+@media (
+    max-width: 600px
+) {
+
+    html,
+    body {
+
+        overflow: auto;
+
+    }
+
+
+    .manager-container {
+
+        height: auto;
+
+        padding:
+            8px;
+
+        gap: 8px;
+
+        overflow: visible;
+
+    }
+
+
+    .summary-grid {
+
+        grid-template-columns:
+            1fr;
+
+    }
+
+
+    .indicator-card {
+
+        height: 60px;
+
+    }
+
+
+    .metric-value {
+
+        font-size: 20px;
+
+    }
+
+
+    .project-map {
+
+        height: 350px;
+
+    }
+
+
+    .manager-filter-navbar {
+
+        padding:
+            8px;
+
+        gap: 8px;
+
+    }
+
+
+    .manager-filter-group {
+
+        width: 100%;
+
+        min-width: 100%;
+
+    }
+
+
+    .manager-filter-actions {
+
+        width: 100%;
+
+    }
+
+
+    .manager-filter-actions calcite-button {
+
+        width: 100%;
+
+    }
+
+}
