@@ -1,5 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.db.models import Count, Sum, Q
+from math import ceil
+
+
 
 from rest_framework import viewsets
 from rest_framework.response import Response
@@ -23,150 +26,354 @@ User = get_user_model()
 # AUTHORITY
 # ==========================================================
 
-class ManagerAuthorityViewSet(viewsets.ReadOnlyModelViewSet):
+
+class ManagerAuthorityViewSet(
+    viewsets.ReadOnlyModelViewSet
+):
 
     serializer_class = ManagerAuthoritySerializer
 
+    # ======================================================
+    # QUERYSET
+    # ======================================================
+
     def get_queryset(self):
 
-        authorities = (
-            Authority.objects
-            .prefetch_related(
-                "reviews",
-                "grids",
-            )
-        )
+        return Authority.objects.all()
 
-        return authorities
+    # ======================================================
+    # SERIALIZER
+    # ======================================================
 
     def get_serializer_class(self):
 
         if self.action == "retrieve":
+
             return ManagerAuthorityDetailSerializer
 
         return ManagerAuthoritySerializer
 
-    def _calculate_authority_data(self, authority):
+    # ======================================================
+    # AUTHORITY DATA
+    # ======================================================
 
-        grids = list(
-            authority.grids
-            .select_related("assigned_to")
-        )
+    def get_authority_data(
+        self,
+        authority
+    ):
 
         # --------------------------------------------------
-        # Calculate grid street lengths
+        # GRID STATISTICS
         # --------------------------------------------------
 
-        total_km = 0.0
-
-        grid_km = {}
-
-        for grid in grids:
-
-            streets = (
-                Street.objects
-                .filter(
-                    geom__intersects=grid.geom
-                )
-                .annotate(
-                    intersection_length=Length(
-                        Intersection(
-                            "geom",
-                            grid.geom
-                        )
-                    )
-                )
+        grid_stats = (
+            Grid.objects
+            .filter(
+                authority_id=authority.id
             )
+            .aggregate(
 
-            km = sum(
-                (
-                    street.intersection_length.m
-                    for street in streets
-                    if street.intersection_length
+                no_grids=Count("id"),
+
+                total_km=Sum(
+                    "km_to_digitize"
                 ),
-                0
-            ) / 1000
 
-            grid_km[grid.pk] = km
+                total_completed_km=Sum(
+                    "km_completed"
+                ),
 
-            total_km += km
+                estimated_hours=Sum(
+                    "estimated_time_to_capture"
+                ),
 
-        return grid_km, total_km
-
-    def retrieve(self, request, *args, **kwargs):
-
-        authority = self.get_object()
-
-        grid_km, total_km = (
-            self._calculate_authority_data(
-                authority
             )
         )
 
-        grids = list(
-            authority.grids.all()
+        no_grids = (
+            grid_stats["no_grids"]
+            or 0
         )
 
-        completed_km = sum(
-            grid.km_completed or 0
-            for grid in grids
+        total_km = float(
+            grid_stats["total_km"]
+            or 0
         )
 
-        reviewed_km = sum(
-            review.total_km_reviewed or 0
-            for review in authority.reviews.all()
+        completed_km = float(
+            grid_stats["total_completed_km"]
+            or 0
         )
 
-        estimated_hours = sum(
-            grid.estimated_time_to_capture or 0
-            for grid in grids
+        estimated_hours = float(
+            grid_stats["estimated_hours"]
+            or 0
         )
 
         # --------------------------------------------------
-        # Attach calculated values
+        # REVIEW STATISTICS
         # --------------------------------------------------
 
-        authority.no_grids = len(grids)
-
-        authority.total_km = total_km
-
-        authority.total_completed_km = completed_km
-
-        authority.km_reviewed = reviewed_km
-
-        authority.estimated_time_to_complete = (
-            estimated_hours
+        review_stats = (
+            Review.objects
+            .filter(
+                authority_id=authority.id,
+                is_active=True,
+            )
+            .aggregate(
+                reviewed_km=Sum(
+                    "total_km_reviewed"
+                )
+            )
         )
 
-        authority.completion_percentage = (
-            (completed_km / total_km * 100)
-            if total_km
-            else 0
+        reviewed_km = float(
+            review_stats["reviewed_km"]
+            or 0
         )
 
-        authority.review_percentage = (
-            (reviewed_km / total_km * 100)
-            if total_km
-            else 0
-        )
+        # --------------------------------------------------
+        # CALCULATIONS
+        # --------------------------------------------------
 
-        authority.remaining_km = max(
+        remaining_km = max(
             total_km - completed_km,
             0
         )
 
-        serializer = self.get_serializer(
-            authority,
-            context={
-                "grid_km": grid_km,
-                "total_km": total_km,
-            }
+        completion_percentage = (
+
+            (
+                completed_km /
+                total_km
+            ) * 100
+
+            if total_km > 0
+
+            else 0.0
+
+        )
+
+        review_percentage = (
+
+            (
+                reviewed_km /
+                total_km
+            ) * 100
+
+            if total_km > 0
+
+            else 0.0
+
+        )
+
+        # --------------------------------------------------
+        # DIGITIZATION TIME
+        # --------------------------------------------------
+
+        daily_digitization_capacity = (
+
+            Grid.NUM_DIGITIZERS
+            *
+            Grid.WORKING_HOURS_PER_DAY
+
+        )
+
+        estimated_time_to_complete = (
+
+            estimated_hours /
+            daily_digitization_capacity
+
+            if daily_digitization_capacity > 0
+
+            else 0.0
+
+        )
+
+        # --------------------------------------------------
+        # REVIEW TIME
+        # --------------------------------------------------
+
+        estimated_time_to_review = (
+
+            (
+                no_grids * 5
+            ) / 60
+
+        ) / Grid.WORKING_HOURS_PER_DAY
+
+        # --------------------------------------------------
+        # CURRENT REVIEW
+        # --------------------------------------------------
+
+        current_review = (
+            Review.objects
+            .filter(
+                authority_id=authority.id,
+                is_active=True,
+                total_km_reviewed__gt=0,
+            )
+            .order_by("-day")
+            .first()
+        )
+
+        # --------------------------------------------------
+        # SCHEDULE
+        # --------------------------------------------------
+
+        days_ahead_behind_schedule = 0.0
+
+        if current_review:
+
+            estimated_days = ceil(
+                estimated_time_to_review
+            )
+
+            if estimated_days > 0:
+
+                ideal_percentage = (
+                    current_review.day /
+                    estimated_days
+                )
+
+                actual_percentage = (
+                    review_percentage /
+                    100
+                )
+
+                days_ahead_behind_schedule = round(
+                    actual_percentage -
+                    ideal_percentage,
+                    4
+                )
+
+        # --------------------------------------------------
+        # RETURN
+        # --------------------------------------------------
+
+        return {
+
+            "no_grids":
+                no_grids,
+
+            "total_km":
+                total_km,
+
+            "total_completed_km":
+                completed_km,
+
+            "remaining_km":
+                remaining_km,
+
+            "completion_percentage":
+                completion_percentage,
+
+            "km_reviewed":
+                reviewed_km,
+
+            "review_percentage":
+                review_percentage,
+
+            "estimated_time_to_complete":
+                float(
+                    estimated_time_to_complete
+                ),
+
+            "estimated_time_to_review":
+                float(
+                    estimated_time_to_review
+                ),
+
+            "days_ahead_behind_schedule":
+                float(
+                    days_ahead_behind_schedule
+                ),
+
+        }
+
+    # ======================================================
+    # LIST
+    # ======================================================
+
+    def list(
+        self,
+        request,
+        *args,
+        **kwargs
+    ):
+
+        queryset = self.get_queryset()
+
+        # --------------------------------------------------
+        # Build serialized results one authority at a time.
+        # This is important because authority_data is
+        # different for every authority.
+        # --------------------------------------------------
+
+        results = []
+
+        for authority in queryset:
+
+            authority_data = (
+                self.get_authority_data(
+                    authority
+                )
+            )
+
+            serializer = (
+                ManagerAuthoritySerializer(
+                    authority,
+                    context={
+                        **self.get_serializer_context(),
+
+                        "authority_data":
+                            authority_data,
+                    }
+                )
+            )
+
+            results.append(
+                serializer.data
+            )
+
+        return Response(
+            results
+        )
+
+    # ======================================================
+    # RETRIEVE
+    # ======================================================
+
+    def retrieve(
+        self,
+        request,
+        *args,
+        **kwargs
+    ):
+
+        authority = self.get_object()
+
+        authority_data = (
+            self.get_authority_data(
+                authority
+            )
+        )
+
+        serializer = (
+            ManagerAuthorityDetailSerializer(
+                authority,
+                context={
+                    **self.get_serializer_context(),
+
+                    "authority_data":
+                        authority_data,
+                }
+            )
         )
 
         return Response(
             serializer.data
         )
-
 # ==========================================================
 # GRID VIEWSET
 # ==========================================================
@@ -188,12 +395,12 @@ class ManagerGridViewSet(viewsets.ModelViewSet):
             Grid.objects
             .select_related(
                 "authority",
-                "assigned_to"
+                "assigned_to",
             )
             .annotate(
                 geom_json=AsGeoJSON(
                     "geom",
-                    precision=6
+                    precision=5,
                 )
             )
             .order_by("id")
@@ -282,75 +489,4 @@ class ManagerReviewViewSet(viewsets.ModelViewSet):
 
         return queryset
 
-
-# ==========================================================
-# EMPLOYEE VIEWSET
-# ==========================================================
-
-class ManagerEmployeeViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    Manager Employee / Workload API.
-
-    Endpoints:
-
-        GET /api/v1/manager/employees/
-
-        GET /api/v1/manager/employees/<id>/
-
-        GET /api/v1/manager/employees/<id>/grids/
-
-    """
-
-    serializer_class = ManagerEmployeeSerializer
-
-    queryset = User.objects.all()
-
-    def get_queryset(self):
-
-        return (
-            User.objects
-            .filter(
-                assigned_grids__isnull=False
-            )
-            .distinct()
-            .order_by(
-                "username"
-            )
-        )
-
-    # ======================================================
-    # EMPLOYEE GRIDS
-    # ======================================================
-
-    @action(
-        detail=True,
-        methods=["get"],
-        url_path="grids"
-    )
-    def grids(self, request, pk=None):
-
-        user = self.get_object()
-
-        queryset = (
-            Grid.objects
-            .filter(
-                assigned_to=user
-            )
-            .select_related(
-                "authority"
-            )
-            .order_by("id")
-        )
-
-        serializer = ManagerGridSerializer(
-            queryset,
-            many=True,
-            context={
-                "request": request
-            }
-        )
-
-        return Response(
-            serializer.data
-        )
 

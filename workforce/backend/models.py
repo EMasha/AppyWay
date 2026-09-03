@@ -540,51 +540,6 @@ class Grid(models.Model):
     # ESTIMATED COMPLETION DAY
     # ==========================================================
 
-    @property
-    def estimated_completion_day(self):
-        """
-        Estimated working day on which this Grid
-        will be completed.
-
-        Each employee works 7.5 hours per day.
-
-        Grids are processed in ID order.
-        """
-
-        if not self.assigned_to:
-            return None
-
-        if not self.estimated_time_to_capture:
-            return None
-
-        grids = (
-            Grid.objects
-            .filter(
-                assigned_to=self.assigned_to,
-                estimated_time_to_capture__isnull=False
-            )
-            .filter(
-                id__lte=self.id
-            )
-            .aggregate(
-                total=Sum(
-                    "estimated_time_to_capture"
-                )
-            )
-        )
-
-        total_hours = (
-            grids["total"] or 0.0
-        )
-
-        if total_hours <= 0:
-            return None
-
-        return math.ceil(
-            total_hours
-            / self.WORKING_HOURS_PER_DAY
-        )
-
     # ==========================================================
     # SAVE
     # ==========================================================

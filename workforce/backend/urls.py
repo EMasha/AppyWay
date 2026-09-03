@@ -24,11 +24,7 @@ router.register(
     basename="manager-reviews"
 )
 
-router.register(
-    r"employees",
-    ManagerEmployeeViewSet,
-    basename="manager-employees"
-)
+
 
 
 urlpatterns = router.urls

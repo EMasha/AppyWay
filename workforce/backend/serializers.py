@@ -16,6 +16,7 @@ User = get_user_model()
 # ==========================================================
 
 class ManagerGridSerializer(serializers.ModelSerializer):
+
     geom = serializers.SerializerMethodField()
 
     authority_name = serializers.CharField(
@@ -23,9 +24,8 @@ class ManagerGridSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
-    assigned_to_name = serializers.CharField(
-        source="assigned_to.username",
-        read_only=True
+    assigned_to_name = (
+        serializers.SerializerMethodField()
     )
 
     status_display = serializers.CharField(
@@ -33,21 +33,21 @@ class ManagerGridSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
-    # ------------------------------------------------------
-    # CALCULATED / READ ONLY
-    # ------------------------------------------------------
-
     km_to_digitize = serializers.FloatField(
         read_only=True
     )
 
-    percentage_of_total_streets = serializers.FloatField(
-        read_only=True
+    percentage_of_total_streets = (
+        serializers.FloatField(
+            read_only=True
+        )
     )
 
-    estimated_completion_day = serializers.IntegerField(
-        read_only=True,
-        allow_null=True
+    estimated_completion_day = (
+        serializers.IntegerField(
+            read_only=True,
+            allow_null=True
+        )
     )
 
     complete_time = serializers.FloatField(
@@ -82,7 +82,8 @@ class ManagerGridSerializer(serializers.ModelSerializer):
             "km_to_digitize",
             "km_completed",
             "percentage_of_total_streets",
-            "geom"
+
+            "geom",
         ]
 
         read_only_fields = [
@@ -102,26 +103,9 @@ class ManagerGridSerializer(serializers.ModelSerializer):
 
             "km_to_digitize",
             "percentage_of_total_streets",
-            "geom"
+            "geom",
         ]
 
-    def validate_km_completed(self, value):
-
-        if value < 0:
-            raise serializers.ValidationError(
-                "Completed KM cannot be negative."
-            )
-
-        return value
-
-    def validate_estimated_time_to_capture(self, value):
-
-        if value is not None and value < 0:
-            raise serializers.ValidationError(
-                "Estimated capture time cannot be negative."
-            )
-
-        return value
     def get_geom(self, obj):
 
         return obj.geom_json
@@ -131,7 +115,36 @@ class ManagerGridSerializer(serializers.ModelSerializer):
         if not obj.assigned_to:
             return None
 
-        return obj.assigned_to.get_full_name() or obj.assigned_to.username
+        return (
+            obj.assigned_to.get_full_name()
+            or obj.assigned_to.username
+        )
+
+    def validate_km_completed(self, value):
+
+        if value < 0:
+
+            raise serializers.ValidationError(
+                "Completed KM cannot be negative."
+            )
+
+        return value
+
+    def validate_estimated_time_to_capture(
+        self,
+        value
+    ):
+
+        if (
+            value is not None
+            and value < 0
+        ):
+
+            raise serializers.ValidationError(
+                "Estimated capture time cannot be negative."
+            )
+
+        return value
 
 
 # ==========================================================
@@ -216,7 +229,13 @@ class ManagerReviewSerializer(serializers.ModelSerializer):
 # AUTHORITY SERIALIZER
 # ==========================================================
 
-class ManagerAuthoritySerializer(serializers.ModelSerializer):
+# ==========================================================
+# AUTHORITY SERIALIZER
+# ==========================================================
+
+class ManagerAuthoritySerializer(
+    serializers.ModelSerializer
+):
 
     no_grids = serializers.IntegerField(
         read_only=True
@@ -285,101 +304,3 @@ class ManagerAuthoritySerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-# ==========================================================
-# AUTHORITY DETAIL
-# ==========================================================
-
-class ManagerAuthorityDetailSerializer(
-    ManagerAuthoritySerializer
-):
-
-    grids = ManagerGridSerializer(
-        many=True,
-        read_only=True
-    )
-
-    reviews = ManagerReviewSerializer(
-        many=True,
-        read_only=True
-    )
-
-    class Meta(
-        ManagerAuthoritySerializer.Meta
-    ):
-
-        fields = (
-            ManagerAuthoritySerializer.Meta.fields
-            + [
-                "grids",
-                "reviews",
-            ]
-        )
-
-        read_only_fields = fields
-
-
-# ==========================================================
-# EMPLOYEE
-# ==========================================================
-
-class ManagerEmployeeSerializer(
-    serializers.ModelSerializer
-):
-
-    assigned_grids = serializers.IntegerField(
-        read_only=True
-    )
-
-    completed_grids = serializers.IntegerField(
-        read_only=True
-    )
-
-    remaining_grids = serializers.IntegerField(
-        read_only=True
-    )
-
-    total_km = serializers.FloatField(
-        read_only=True
-    )
-
-    completed_km = serializers.FloatField(
-        read_only=True
-    )
-
-    completion_percentage = serializers.FloatField(
-        read_only=True
-    )
-
-    estimated_hours = serializers.FloatField(
-        read_only=True
-    )
-
-    estimated_completion_day = serializers.IntegerField(
-        read_only=True,
-        allow_null=True
-    )
-
-    class Meta:
-
-        model = User
-
-        fields = [
-            "id",
-            "username",
-            "first_name",
-            "last_name",
-            "email",
-
-            "assigned_grids",
-            "completed_grids",
-            "remaining_grids",
-
-            "total_km",
-            "completed_km",
-            "completion_percentage",
-
-            "estimated_hours",
-            "estimated_completion_day",
-        ]
-
-        read_only_fields = fields

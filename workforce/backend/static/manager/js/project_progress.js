@@ -40,7 +40,28 @@ window.managerMapView = null;
 
 window.managerGraphicsLayer = null;
 
+window.managerLabelGraphicsLayer = null;
+
 window.managerGraphicClass = null;
+
+window.managerLoadingCount = 0;
+
+
+/* ==========================================================
+   CONSTANTS
+========================================================== */
+
+/*
+ * Grid labels are visible at scale 1:10,000 and closer.
+ *
+ * Example:
+ *
+ * 1:20,000  -> hidden
+ * 1:10,000  -> visible
+ * 1:5,000   -> visible
+ * 1:2,000   -> visible
+ */
+const GRID_LABEL_MIN_SCALE = 50000;
 
 
 /* ==========================================================
@@ -74,10 +95,218 @@ function getCsrfToken() {
 
 
 /* ==========================================================
+   LOADING OVERLAY
+========================================================== */
+
+function getLoadingOverlay() {
+
+    let loader =
+        document.getElementById(
+            "manager-dashboard-loading"
+        );
+
+    if (loader) {
+
+        return loader;
+
+    }
+
+    loader =
+        document.createElement(
+            "div"
+        );
+
+    loader.id =
+        "manager-dashboard-loading";
+
+    loader.innerHTML = `
+
+        <div class="manager-dashboard-loading-backdrop">
+
+            <div class="manager-dashboard-loading-box">
+
+                <div class="manager-dashboard-spinner"></div>
+
+                <div class="manager-dashboard-loading-text">
+                    Loading dashboard...
+                </div>
+
+            </div>
+
+        </div>
+
+    `;
+
+    document.body.appendChild(
+        loader
+    );
+
+    /*
+     * Add styles dynamically so this JS does not
+     * require changes to the existing CSS.
+     */
+
+    if (
+        !document.getElementById(
+            "manager-dashboard-loading-styles"
+        )
+    ) {
+
+        const style =
+            document.createElement(
+                "style"
+            );
+
+        style.id =
+            "manager-dashboard-loading-styles";
+
+        style.textContent = `
+
+            #manager-dashboard-loading {
+                position: fixed;
+                inset: 0;
+                z-index: 999999;
+                display: none;
+            }
+
+            #manager-dashboard-loading.active {
+                display: block;
+            }
+
+            .manager-dashboard-loading-backdrop {
+                position: absolute;
+                inset: 0;
+                background: rgba(255, 255, 255, 0.72);
+                backdrop-filter: blur(2px);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .manager-dashboard-loading-box {
+                background: #ffffff;
+                border-radius: 12px;
+                padding: 24px 30px;
+                min-width: 220px;
+                box-shadow:
+                    0 10px 35px rgba(0, 0, 0, 0.18);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 14px;
+            }
+
+            .manager-dashboard-spinner {
+                width: 38px;
+                height: 38px;
+                border-radius: 50%;
+                border: 4px solid #e5e7eb;
+                border-top-color: #2563eb;
+                animation:
+                    managerDashboardSpin
+                    0.8s linear infinite;
+            }
+
+            .manager-dashboard-loading-text {
+                color: #374151;
+                font-size: 14px;
+                font-weight: 500;
+            }
+
+            @keyframes managerDashboardSpin {
+
+                from {
+                    transform: rotate(0deg);
+                }
+
+                to {
+                    transform: rotate(360deg);
+                }
+
+            }
+
+        `;
+
+        document.head.appendChild(
+            style
+        );
+
+    }
+
+    return loader;
+
+}
+
+
+function showDashboardLoading(
+    message = "Loading dashboard..."
+) {
+
+    const loader =
+        getLoadingOverlay();
+
+    const text =
+        loader.querySelector(
+            ".manager-dashboard-loading-text"
+        );
+
+    if (text) {
+
+        text.textContent =
+            message;
+
+    }
+
+    window.managerLoadingCount++;
+
+    loader.classList.add(
+        "active"
+    );
+
+}
+
+
+function hideDashboardLoading() {
+
+    window.managerLoadingCount =
+        Math.max(
+            0,
+            window.managerLoadingCount - 1
+        );
+
+    if (
+        window.managerLoadingCount >
+        0
+    ) {
+
+        return;
+
+    }
+
+    const loader =
+        document.getElementById(
+            "manager-dashboard-loading"
+        );
+
+    if (loader) {
+
+        loader.classList.remove(
+            "active"
+        );
+
+    }
+
+}
+
+
+/* ==========================================================
    GENERIC API
 ========================================================== */
 
-async function fetchApi(url) {
+async function fetchApi(
+    url
+) {
 
     const startTime =
         performance.now();
@@ -85,7 +314,6 @@ async function fetchApi(url) {
     console.log(
         `[API] Loading: ${url}`
     );
-
 
     const response =
         await fetch(
@@ -101,7 +329,6 @@ async function fetchApi(url) {
             }
         );
 
-
     if (!response.ok) {
 
         throw new Error(
@@ -110,20 +337,16 @@ async function fetchApi(url) {
 
     }
 
-
     const data =
         await response.json();
-
 
     const elapsed =
         performance.now() -
         startTime;
 
-
     console.log(
         `[API] ${url} loaded in ${elapsed.toFixed(0)}ms`
     );
-
 
     /*
      * DRF pagination.
@@ -135,13 +358,11 @@ async function fetchApi(url) {
 
     }
 
-
     if (Array.isArray(data.results)) {
 
         return data.results;
 
     }
-
 
     if (Array.isArray(data.data)) {
 
@@ -149,12 +370,10 @@ async function fetchApi(url) {
 
     }
 
-
     console.warn(
         `[API] Unexpected response format from ${url}:`,
         data
     );
-
 
     return [];
 
@@ -167,21 +386,23 @@ async function fetchApi(url) {
 
 async function loadDashboard() {
 
+    showDashboardLoading(
+        "Loading authorities..."
+    );
+
     try {
 
         console.log(
             "[Dashboard] Loading authorities..."
         );
 
-
         /*
          * IMPORTANT:
          *
-         * We intentionally DO NOT load all grids
-         * here.
+         * Authorities are loaded independently.
          *
-         * This prevents the large Grid API response
-         * from consuming Render's memory.
+         * They are NOT replaced by the currently
+         * filtered grids.
          */
 
         window.managerAuthorities =
@@ -189,25 +410,22 @@ async function loadDashboard() {
                 AUTHORITY_API_URL
             );
 
-
         console.log(
             "[Dashboard] Authorities loaded:",
             window.managerAuthorities.length
         );
 
-
         /*
          * Create filter controls.
-         *
-         * Authority options are populated from
-         * the Authority API, not from grids.
          */
 
         createFilterNavbar();
 
-
         /*
          * Default Authority.
+         *
+         * This controls grids/reviews/map,
+         * NOT the authority table.
          */
 
         const selected =
@@ -215,31 +433,25 @@ async function loadDashboard() {
                 "Richmondshire"
             );
 
-
         if (!selected) {
 
             console.warn(
                 "[Dashboard] Richmondshire not found."
             );
 
-
-            /*
-             * If Richmondshire doesn't exist,
-             * leave the authority filter empty.
-             */
-
             window.managerFilters.authority =
                 "";
 
         }
 
-
         /*
-         * Load only the selected authority.
+         * Load filtered grids/reviews.
+         *
+         * The authority table will still use
+         * ALL authorities.
          */
 
         await loadFilteredDashboard();
-
 
         console.log(
             "[Dashboard] Initialization complete."
@@ -252,6 +464,11 @@ async function loadDashboard() {
             "[Dashboard] Initialization failed:",
             error
         );
+
+    }
+    finally {
+
+        hideDashboardLoading();
 
     }
 
@@ -269,17 +486,13 @@ function createFilterNavbar() {
             "manager-filter-bar"
         );
 
-
     if (!filterBar) {
 
         console.warn(
             "[Filters] #manager-filter-bar not found."
         );
 
-        return;
-
     }
-
 
     const authoritySelect =
         document.getElementById(
@@ -312,13 +525,6 @@ function createFilterNavbar() {
      */
 
     populateAuthorityOptions();
-
-
-    /*
-     * Other options will be populated
-     * after the selected authority's grids
-     * have been loaded.
-     */
 
 
     /* ======================================================
@@ -374,7 +580,6 @@ function createFilterNavbar() {
             handleMapRenderModeChanged
         );
 
-
         renderSelect.value =
             window.managerMapRenderMode ||
             "status";
@@ -414,17 +619,14 @@ function populateAuthorityOptions() {
             "filter-authority"
         );
 
-
     if (!authoritySelect) {
 
         return;
 
     }
 
-
     const currentAuthority =
         window.managerFilters.authority;
-
 
     authoritySelect.innerHTML = `
 
@@ -433,7 +635,6 @@ function populateAuthorityOptions() {
         </calcite-option>
 
     `;
-
 
     const authorities =
         [...window.managerAuthorities]
@@ -448,7 +649,6 @@ function populateAuthorityOptions() {
                     )
             );
 
-
     authorities.forEach(
         authority => {
 
@@ -461,24 +661,20 @@ function populateAuthorityOptions() {
 
             }
 
-
             const option =
                 document.createElement(
                     "calcite-option"
                 );
-
 
             option.value =
                 String(
                     authority.id
                 );
 
-
             option.textContent =
                 String(
                     authority.name || ""
                 );
-
 
             authoritySelect.appendChild(
                 option
@@ -486,11 +682,6 @@ function populateAuthorityOptions() {
 
         }
     );
-
-
-    /*
-     * Restore existing selection.
-     */
 
     authoritySelect.value =
         currentAuthority || "";
@@ -509,21 +700,17 @@ function populateStatusOptions() {
             "filter-status"
         );
 
-
     if (!statusSelect) {
 
         return;
 
     }
 
-
     const currentStatus =
         window.managerFilters.status;
 
-
     const statuses =
         new Map();
-
 
     window.managerGrids.forEach(
         grid => {
@@ -534,19 +721,16 @@ function populateStatusOptions() {
 
             }
 
-
             const value =
                 normalizeStatus(
                     grid.status
                 );
-
 
             const label =
                 grid.status_display ||
                 prettifyStatus(
                     value
                 );
-
 
             statuses.set(
                 value,
@@ -556,7 +740,6 @@ function populateStatusOptions() {
         }
     );
 
-
     statusSelect.innerHTML = `
 
         <calcite-option value="">
@@ -564,7 +747,6 @@ function populateStatusOptions() {
         </calcite-option>
 
     `;
-
 
     [...statuses.entries()]
         .sort(
@@ -581,14 +763,11 @@ function populateStatusOptions() {
                         "calcite-option"
                     );
 
-
                 option.value =
                     value;
 
-
                 option.textContent =
                     label;
-
 
                 statusSelect.appendChild(
                     option
@@ -596,7 +775,6 @@ function populateStatusOptions() {
 
             }
         );
-
 
     statusSelect.value =
         currentStatus || "";
@@ -615,21 +793,17 @@ function populateUserOptions() {
             "filter-user"
         );
 
-
     if (!userSelect) {
 
         return;
 
     }
 
-
     const currentUser =
         window.managerFilters.user;
 
-
     const users =
         new Map();
-
 
     window.managerGrids.forEach(
         grid => {
@@ -638,11 +812,9 @@ function populateUserOptions() {
                 grid.assigned_to_id ??
                 grid.assigned_to;
 
-
             const name =
                 grid.assigned_to_name ??
                 grid.assigned_to_name_display;
-
 
             if (
                 id === undefined &&
@@ -653,13 +825,11 @@ function populateUserOptions() {
 
             }
 
-
             const key =
                 id !== undefined &&
                 id !== null
                     ? String(id)
                     : String(name);
-
 
             users.set(
                 key,
@@ -680,7 +850,6 @@ function populateUserOptions() {
         }
     );
 
-
     userSelect.innerHTML = `
 
         <calcite-option value="">
@@ -688,7 +857,6 @@ function populateUserOptions() {
         </calcite-option>
 
     `;
-
 
     [...users.values()]
         .sort(
@@ -705,14 +873,11 @@ function populateUserOptions() {
                         "calcite-option"
                     );
 
-
                 option.value =
                     user.id;
 
-
                 option.textContent =
                     user.name;
-
 
                 userSelect.appendChild(
                     option
@@ -720,7 +885,6 @@ function populateUserOptions() {
 
             }
         );
-
 
     userSelect.value =
         currentUser || "";
@@ -751,13 +915,11 @@ function setDefaultAuthorityFilter(
                     .toLowerCase()
         );
 
-
     if (!authority) {
 
         return false;
 
     }
-
 
     if (
         authority.id === undefined ||
@@ -773,22 +935,18 @@ function setDefaultAuthorityFilter(
 
     }
 
-
     const authorityId =
         String(
             authority.id
         );
 
-
     window.managerFilters.authority =
         authorityId;
-
 
     const authoritySelect =
         document.getElementById(
             "filter-authority"
         );
-
 
     if (authoritySelect) {
 
@@ -796,7 +954,6 @@ function setDefaultAuthorityFilter(
             authorityId;
 
     }
-
 
     console.log(
         "[Filters] Default authority:",
@@ -808,7 +965,6 @@ function setDefaultAuthorityFilter(
                 authorityId
         }
     );
-
 
     return true;
 
@@ -885,7 +1041,6 @@ async function handleFiltersChanged(
             "filter-user"
         );
 
-
     window.managerFilters = {
 
         authority:
@@ -911,7 +1066,6 @@ async function handleFiltersChanged(
 
     };
 
-
     console.log(
         "[Filters] Change:",
         {
@@ -926,7 +1080,6 @@ async function handleFiltersChanged(
         }
     );
 
-
     await loadFilteredDashboard();
 
 }
@@ -938,60 +1091,65 @@ async function handleFiltersChanged(
 
 async function resetFilters() {
 
-    /*
-     * Reset to Richmondshire instead of
-     * loading every grid.
-     */
-
-    window.managerFilters.status =
-        "";
-
-    window.managerFilters.user =
-        "";
-
-
-    /*
-     * Restore Richmondshire as default.
-     */
-
-    setDefaultAuthorityFilter(
-        "Richmondshire"
+    showDashboardLoading(
+        "Resetting filters..."
     );
 
+    try {
 
-    const statusSelect =
-        document.getElementById(
-            "filter-status"
-        );
-
-    const userSelect =
-        document.getElementById(
-            "filter-user"
-        );
-
-
-    if (statusSelect) {
-
-        statusSelect.value =
+        window.managerFilters.status =
             "";
 
-    }
-
-
-    if (userSelect) {
-
-        userSelect.value =
+        window.managerFilters.user =
             "";
 
+        /*
+         * Restore Richmondshire as default.
+         *
+         * Again, this only controls the
+         * grids/reviews/map.
+         */
+
+        setDefaultAuthorityFilter(
+            "Richmondshire"
+        );
+
+        const statusSelect =
+            document.getElementById(
+                "filter-status"
+            );
+
+        const userSelect =
+            document.getElementById(
+                "filter-user"
+            );
+
+        if (statusSelect) {
+
+            statusSelect.value =
+                "";
+
+        }
+
+        if (userSelect) {
+
+            userSelect.value =
+                "";
+
+        }
+
+        console.log(
+            "[Filters] Reset to Richmondshire"
+        );
+
+        await loadFilteredDashboard();
+
     }
+    finally {
 
+        hideDashboardLoading();
 
-    console.log(
-        "[Filters] Reset to Richmondshire"
-    );
-
-
-    await loadFilteredDashboard();
+    }
 
 }
 
@@ -1002,264 +1160,242 @@ async function resetFilters() {
 
 async function loadFilteredDashboard() {
 
-    const authority =
-        window.managerFilters.authority;
-
-    const status =
-        window.managerFilters.status;
-
-    const user =
-        window.managerFilters.user;
-
-
-    /*
-     * --------------------------------------------------------
-     * GRID QUERY
-     * --------------------------------------------------------
-     */
-
-    const gridParams =
-        new URLSearchParams();
-
-
-    if (authority) {
-
-        gridParams.set(
-            "authority",
-            authority
-        );
-
-    }
-
-
-    if (status) {
-
-        gridParams.set(
-            "status",
-            status
-        );
-
-    }
-
-
-    if (user) {
-
-        gridParams.set(
-            "assigned_to",
-            user
-        );
-
-    }
-
-
-    const gridUrl =
-        gridParams.toString()
-            ? `${GRID_API_URL}?${gridParams.toString()}`
-            : GRID_API_URL;
-
-
-    /*
-     * --------------------------------------------------------
-     * REVIEW QUERY
-     * --------------------------------------------------------
-     *
-     * Reviews currently support Authority only
-     * in your Django ViewSet.
-     */
-
-    const reviewParams =
-        new URLSearchParams();
-
-
-    if (authority) {
-
-        reviewParams.set(
-            "authority",
-            authority
-        );
-
-    }
-
-
-    const reviewUrl =
-        reviewParams.toString()
-            ? `${REVIEW_API_URL}?${reviewParams.toString()}`
-            : REVIEW_API_URL;
-
+    showDashboardLoading(
+        "Loading filtered data..."
+    );
 
     try {
 
-        console.log(
-            "[Dashboard] Loading filtered data:",
-            {
-                gridUrl,
-                reviewUrl
-            }
-        );
+        const authority =
+            window.managerFilters.authority;
+
+        const status =
+            window.managerFilters.status;
+
+        const user =
+            window.managerFilters.user;
 
 
         /*
-         * Do NOT load grids until the
-         * authority is known.
+         * ----------------------------------------------------
+         * GRID QUERY
+         * ----------------------------------------------------
          */
 
-        const [
-            grids,
-            reviews
-        ] = await Promise.all([
+        const gridParams =
+            new URLSearchParams();
 
-            fetchApi(
-                gridUrl
-            ),
+        if (authority) {
 
-            fetchApi(
-                reviewUrl
-            )
-
-        ]);
-
-
-        window.managerGrids =
-            grids;
-
-        window.managerReviews =
-            reviews;
-
-
-        window.managerFilteredGrids =
-            grids;
-
-        window.managerFilteredMapGrids =
-            grids;
-
-
-        console.log(
-            "[Dashboard] Filtered data loaded:",
-            {
-                grids:
-                    grids.length,
-
-                reviews:
-                    reviews.length
-            }
-        );
-
-
-        /*
-         * Build Status/User options from
-         * the currently loaded grids only.
-         */
-
-        populateStatusOptions();
-
-        populateUserOptions();
-
-
-        /*
-         * Authority table.
-         *
-         * When an authority is selected, show
-         * only that authority.
-         */
-
-        const filteredAuthorities =
-            getFilteredAuthorities();
-
-
-        renderSummary(
-            filteredAuthorities
-        );
-
-
-        renderAuthorities(
-            filteredAuthorities
-        );
-
-
-        /*
-         * Grid table.
-         */
-
-        renderGrids(
-            grids
-        );
-
-
-        /*
-         * Reviews.
-         */
-
-        renderReviews(
-            reviews
-        );
-
-
-        /*
-         * Map.
-         */
-
-        if (
-            window.managerMapView
-        ) {
-
-            renderMap(
-                grids
+            gridParams.set(
+                "authority",
+                authority
             );
 
         }
-        else {
 
-            await loadGridMap();
+        if (status) {
+
+            gridParams.set(
+                "status",
+                status
+            );
+
+        }
+
+        if (user) {
+
+            gridParams.set(
+                "assigned_to",
+                user
+            );
+
+        }
+
+        const gridUrl =
+            gridParams.toString()
+                ? `${GRID_API_URL}?${gridParams.toString()}`
+                : GRID_API_URL;
+
+
+        /*
+         * ----------------------------------------------------
+         * REVIEW QUERY
+         * ----------------------------------------------------
+         */
+
+        const reviewParams =
+            new URLSearchParams();
+
+        if (authority) {
+
+            reviewParams.set(
+                "authority",
+                authority
+            );
+
+        }
+
+        const reviewUrl =
+            reviewParams.toString()
+                ? `${REVIEW_API_URL}?${reviewParams.toString()}`
+                : REVIEW_API_URL;
+
+
+        try {
+
+            console.log(
+                "[Dashboard] Loading filtered data:",
+                {
+                    gridUrl,
+                    reviewUrl
+                }
+            );
+
+            const [
+                grids,
+                reviews
+            ] = await Promise.all([
+
+                fetchApi(
+                    gridUrl
+                ),
+
+                fetchApi(
+                    reviewUrl
+                )
+
+            ]);
+
+            window.managerGrids =
+                grids;
+
+            window.managerReviews =
+                reviews;
+
+            window.managerFilteredGrids =
+                grids;
+
+            window.managerFilteredMapGrids =
+                grids;
+
+            console.log(
+                "[Dashboard] Filtered data loaded:",
+                {
+                    grids:
+                        grids.length,
+
+                    reviews:
+                        reviews.length,
+
+                    authorities:
+                        window.managerAuthorities.length
+                }
+            );
+
+
+            /*
+             * ------------------------------------------------
+             * FILTER OPTIONS
+             * ------------------------------------------------
+             */
+
+            populateStatusOptions();
+
+            populateUserOptions();
+
+
+            /*
+             * ------------------------------------------------
+             * AUTHORITY TABLE
+             *
+             * IMPORTANT:
+             *
+             * NEVER use the selected authority here.
+             *
+             * Always render every authority.
+             * ------------------------------------------------
+             */
+
+            renderSummary(
+                window.managerAuthorities
+            );
+
+            renderAuthorities(
+                window.managerAuthorities
+            );
+
+
+            /*
+             * ------------------------------------------------
+             * GRID TABLE
+             * ------------------------------------------------
+             */
+
+            renderGrids(
+                grids
+            );
+
+
+            /*
+             * ------------------------------------------------
+             * REVIEWS
+             * ------------------------------------------------
+             */
+
+            renderReviews(
+                reviews
+            );
+
+
+            /*
+             * ------------------------------------------------
+             * MAP
+             * ------------------------------------------------
+             */
+
+            if (
+                window.managerMapView
+            ) {
+
+                renderMap(
+                    grids
+                );
+
+            }
+            else {
+
+                await loadGridMap();
+
+            }
+
+        }
+        catch (error) {
+
+            console.error(
+                "[Dashboard] Filtered load failed:",
+                error
+            );
 
         }
 
     }
-    catch (error) {
+    finally {
 
-        console.error(
-            "[Dashboard] Filtered load failed:",
-            error
-        );
+        /*
+         * Hide loading only after:
+         *
+         * API fetch
+         * tables
+         * map
+         * rendering
+         *
+         * have completed.
+         */
 
-    }
-
-}
-
-
-/* ==========================================================
-   FILTERED AUTHORITIES
-========================================================== */
-
-function getFilteredAuthorities() {
-
-    const authority =
-        window.managerFilters.authority;
-
-
-    /*
-     * No Authority selected.
-     *
-     * This is technically capable of loading all
-     * authorities, but the initial dashboard uses
-     * Richmondshire.
-     */
-
-    if (!authority) {
-
-        return window.managerAuthorities;
+        hideDashboardLoading();
 
     }
-
-
-    return window.managerAuthorities.filter(
-        item =>
-            String(
-                item.id
-            ) ===
-            String(
-                authority
-            )
-    );
 
 }
 
@@ -1275,7 +1411,6 @@ function renderSummary(
     const totalAuthorities =
         authorities.length;
 
-
     const totalKm =
         authorities.reduce(
             (sum, authority) =>
@@ -1285,7 +1420,6 @@ function renderSummary(
                 ),
             0
         );
-
 
     const completedKm =
         authorities.reduce(
@@ -1298,7 +1432,6 @@ function renderSummary(
             0
         );
 
-
     const reviewedKm =
         authorities.reduce(
             (sum, authority) =>
@@ -1309,7 +1442,6 @@ function renderSummary(
             0
         );
 
-
     const digitizationPercentage =
         totalKm > 0
             ? completedKm /
@@ -1317,14 +1449,12 @@ function renderSummary(
               100
             : 0;
 
-
     const reviewPercentage =
         totalKm > 0
             ? reviewedKm /
               totalKm *
               100
             : 0;
-
 
     const totalAuthoritiesElement =
         document.getElementById(
@@ -1356,14 +1486,12 @@ function renderSummary(
             "review-percentage"
         );
 
-
     if (totalAuthoritiesElement) {
 
         totalAuthoritiesElement.textContent =
             totalAuthorities;
 
     }
-
 
     if (totalKmElement) {
 
@@ -1372,14 +1500,12 @@ function renderSummary(
 
     }
 
-
     if (completedKmElement) {
 
         completedKmElement.textContent =
             completedKm.toFixed(2);
 
     }
-
 
     if (reviewedKmElement) {
 
@@ -1388,14 +1514,12 @@ function renderSummary(
 
     }
 
-
     if (digitizationElement) {
 
         digitizationElement.textContent =
             `${digitizationPercentage.toFixed(1)}%`;
 
     }
-
 
     if (reviewElement) {
 
@@ -1420,16 +1544,13 @@ function renderAuthorities(
             "authority-table-body"
         );
 
-
     if (!tbody) {
 
         return;
 
     }
 
-
     tbody.innerHTML = "";
-
 
     if (!authorities.length) {
 
@@ -1445,7 +1566,6 @@ function renderAuthorities(
 
     }
 
-
     authorities.forEach(
         authority => {
 
@@ -1454,19 +1574,16 @@ function renderAuthorities(
                     authority.total_km || 0
                 );
 
-
             const completedKm =
                 Number(
                     authority.total_completed_km ||
                     0
                 );
 
-
             const reviewedKm =
                 Number(
                     authority.km_reviewed || 0
                 );
-
 
             const digitizationPercentage =
                 Number(
@@ -1480,7 +1597,6 @@ function renderAuthorities(
                     )
                 );
 
-
             const reviewPercentage =
                 Number(
                     authority.review_percentage ??
@@ -1493,20 +1609,17 @@ function renderAuthorities(
                     )
                 );
 
-
             const schedule =
                 Number(
                     authority.days_ahead_behind_schedule ||
                     0
                 );
 
-
             let scheduleClass =
                 "status-on-track";
 
             let scheduleText =
                 "On Track";
-
 
             if (schedule > 0) {
 
@@ -1529,12 +1642,10 @@ function renderAuthorities(
 
             }
 
-
             const row =
                 document.createElement(
                     "tr"
                 );
-
 
             row.innerHTML = `
 
@@ -1586,7 +1697,6 @@ function renderAuthorities(
 
             `;
 
-
             tbody.appendChild(
                 row
             );
@@ -1610,16 +1720,13 @@ function renderGrids(
             "grid-table-body"
         );
 
-
     if (!tbody) {
 
         return;
 
     }
 
-
     tbody.innerHTML = "";
-
 
     if (!grids.length) {
 
@@ -1635,7 +1742,6 @@ function renderGrids(
 
     }
 
-
     grids.forEach(
         grid => {
 
@@ -1644,12 +1750,10 @@ function renderGrids(
                     grid.km_to_digitize || 0
                 );
 
-
             const completedKm =
                 Number(
                     grid.km_completed || 0
                 );
-
 
             const progress =
                 km > 0
@@ -1658,21 +1762,17 @@ function renderGrids(
                       100
                     : 0;
 
-
             const estimatedDayToWord =
                 grid.estimated_completion_day ??
                 "-";
-
 
             const row =
                 document.createElement(
                     "tr"
                 );
 
-
             row.dataset.gridId =
                 grid.id;
-
 
             row.innerHTML = `
 
@@ -1761,7 +1861,6 @@ function renderGrids(
 
             `;
 
-
             tbody.appendChild(
                 row
             );
@@ -1783,17 +1882,14 @@ function editGridRow(
     const row =
         button.closest("tr");
 
-
     if (!row) {
 
         return;
 
     }
 
-
     const gridId =
         row.dataset.gridId;
-
 
     const grid =
         window.managerGrids.find(
@@ -1801,7 +1897,6 @@ function editGridRow(
                 String(item.id) ===
                 String(gridId)
         );
-
 
     if (!grid) {
 
@@ -1813,7 +1908,6 @@ function editGridRow(
         return;
 
     }
-
 
     row.querySelector(
         ".completed-km-cell"
@@ -1830,7 +1924,6 @@ function editGridRow(
         >
 
     `;
-
 
     row.querySelector(
         ".status-cell"
@@ -1894,7 +1987,6 @@ function editGridRow(
 
     `;
 
-
     button.parentElement.innerHTML = `
 
         <button
@@ -1927,29 +2019,24 @@ async function saveGridRow(
     const row =
         button.closest("tr");
 
-
     if (!row) {
 
         return;
 
     }
 
-
     const gridId =
         row.dataset.gridId;
-
 
     const kmInput =
         row.querySelector(
             ".grid-edit-km"
         );
 
-
     const statusInput =
         row.querySelector(
             ".grid-edit-status"
         );
-
 
     if (
         !kmInput ||
@@ -1960,12 +2047,10 @@ async function saveGridRow(
 
     }
 
-
     const kmCompleted =
         Number(
             kmInput.value
         );
-
 
     if (
         !Number.isFinite(
@@ -1982,7 +2067,6 @@ async function saveGridRow(
 
     }
 
-
     const payload = {
 
         km_completed:
@@ -1993,6 +2077,9 @@ async function saveGridRow(
 
     };
 
+    showDashboardLoading(
+        "Saving grid..."
+    );
 
     try {
 
@@ -2001,7 +2088,6 @@ async function saveGridRow(
 
         button.textContent =
             "Saving...";
-
 
         const response =
             await fetch(
@@ -2035,7 +2121,6 @@ async function saveGridRow(
                 }
             );
 
-
         if (!response.ok) {
 
             const errorData =
@@ -2044,7 +2129,6 @@ async function saveGridRow(
                     .catch(
                         () => null
                     );
-
 
             throw new Error(
                 errorData
@@ -2056,10 +2140,8 @@ async function saveGridRow(
 
         }
 
-
         const updatedGrid =
             await response.json();
-
 
         const index =
             window.managerGrids.findIndex(
@@ -2068,19 +2150,12 @@ async function saveGridRow(
                     String(gridId)
             );
 
-
         if (index !== -1) {
 
             window.managerGrids[index] =
                 updatedGrid;
 
         }
-
-
-        /*
-         * Reload the currently selected filters
-         * from the backend.
-         */
 
         await loadFilteredDashboard();
 
@@ -2092,17 +2167,20 @@ async function saveGridRow(
             error
         );
 
-
         alert(
             `Failed to save grid: ${error.message}`
         );
-
 
         button.disabled =
             false;
 
         button.textContent =
             "Save";
+
+    }
+    finally {
+
+        hideDashboardLoading();
 
     }
 
@@ -2135,16 +2213,13 @@ function renderReviews(
             "review-table-body"
         );
 
-
     if (!tbody) {
 
         return;
 
     }
 
-
     tbody.innerHTML = "";
-
 
     if (!reviews.length) {
 
@@ -2160,7 +2235,6 @@ function renderReviews(
 
     }
 
-
     reviews.forEach(
         review => {
 
@@ -2169,39 +2243,32 @@ function renderReviews(
                     review.total_km_reviewed || 0
                 );
 
-
             const reviewPercentage =
                 Number(
                     review.percentage_of_total_km_reviewed ||
                     0
                 );
 
-
             const actualBurndown =
                 Number(
                     review.actual_burndown_rate || 0
                 );
-
 
             const idealBurndown =
                 Number(
                     review.ideal_burndown_rate || 0
                 );
 
-
             const difference =
                 Number(
                     review.burndown_difference || 0
                 );
 
-
             let statusClass =
                 "status-on-track";
 
-
             let statusText =
                 "On Track";
-
 
             if (difference > 0) {
 
@@ -2222,16 +2289,13 @@ function renderReviews(
 
             }
 
-
             const row =
                 document.createElement(
                     "tr"
                 );
 
-
             row.dataset.reviewId =
                 review.id;
-
 
             row.innerHTML = `
 
@@ -2288,7 +2352,6 @@ function renderReviews(
 
             `;
 
-
             tbody.appendChild(
                 row
             );
@@ -2310,17 +2373,14 @@ function editReviewRow(
     const row =
         button.closest("tr");
 
-
     if (!row) {
 
         return;
 
     }
 
-
     const reviewId =
         row.dataset.reviewId;
-
 
     const review =
         window.managerReviews.find(
@@ -2329,13 +2389,11 @@ function editReviewRow(
                 String(reviewId)
         );
 
-
     if (!review) {
 
         return;
 
     }
-
 
     row.querySelector(
         ".review-day-cell"
@@ -2353,7 +2411,6 @@ function editReviewRow(
 
     `;
 
-
     row.querySelector(
         ".review-km-cell"
     ).innerHTML = `
@@ -2369,7 +2426,6 @@ function editReviewRow(
         >
 
     `;
-
 
     button.parentElement.innerHTML = `
 
@@ -2403,29 +2459,24 @@ async function saveReviewRow(
     const row =
         button.closest("tr");
 
-
     if (!row) {
 
         return;
 
     }
 
-
     const reviewId =
         row.dataset.reviewId;
-
 
     const dayInput =
         row.querySelector(
             ".review-edit-day"
         );
 
-
     const kmInput =
         row.querySelector(
             ".review-edit-km"
         );
-
 
     if (
         !dayInput ||
@@ -2436,18 +2487,15 @@ async function saveReviewRow(
 
     }
 
-
     const day =
         Number(
             dayInput.value
         );
 
-
     const kmReviewed =
         Number(
             kmInput.value
         );
-
 
     if (
         !Number.isFinite(day) ||
@@ -2462,7 +2510,6 @@ async function saveReviewRow(
 
     }
 
-
     if (
         !Number.isFinite(kmReviewed) ||
         kmReviewed < 0
@@ -2476,7 +2523,6 @@ async function saveReviewRow(
 
     }
 
-
     const payload = {
 
         day:
@@ -2487,6 +2533,9 @@ async function saveReviewRow(
 
     };
 
+    showDashboardLoading(
+        "Saving review..."
+    );
 
     try {
 
@@ -2495,7 +2544,6 @@ async function saveReviewRow(
 
         button.textContent =
             "Saving...";
-
 
         const response =
             await fetch(
@@ -2529,7 +2577,6 @@ async function saveReviewRow(
                 }
             );
 
-
         if (!response.ok) {
 
             const errorData =
@@ -2538,7 +2585,6 @@ async function saveReviewRow(
                     .catch(
                         () => null
                     );
-
 
             throw new Error(
                 errorData
@@ -2550,14 +2596,6 @@ async function saveReviewRow(
 
         }
 
-
-        /*
-         * We don't need to reload ALL authorities.
-         *
-         * Reload only the currently selected
-         * authority's reviews/grids.
-         */
-
         await loadFilteredDashboard();
 
     }
@@ -2568,17 +2606,20 @@ async function saveReviewRow(
             error
         );
 
-
         alert(
             `Failed to save review: ${error.message}`
         );
-
 
         button.disabled =
             false;
 
         button.textContent =
             "Save";
+
+    }
+    finally {
+
+        hideDashboardLoading();
 
     }
 
@@ -2609,7 +2650,6 @@ async function loadGridMap() {
             "map-loader"
         );
 
-
     if (loader) {
 
         loader.setAttribute(
@@ -2618,7 +2658,6 @@ async function loadGridMap() {
         );
 
     }
-
 
     try {
 
@@ -2633,22 +2672,25 @@ async function loadGridMap() {
 
         }
 
-
-        /*
-         * IMPORTANT:
-         *
-         * This is the already-filtered dataset.
-         */
-
         const grids =
             window.managerFilteredMapGrids;
-
 
         await new Promise(
             (
                 resolve,
                 reject
             ) => {
+
+                /*
+                 * IMPORTANT:
+                 *
+                 * LabelClass is intentionally NOT imported.
+                 *
+                 * This fixes:
+                 *
+                 * scriptError:
+                 * https://js.arcgis.com/4.31/esri/layers/LabelClass.js
+                 */
 
                 require(
                     [
@@ -2670,7 +2712,6 @@ async function loadGridMap() {
                             window.managerGraphicClass =
                                 Graphic;
 
-
                             createGridMap(
                                 Map,
                                 MapView,
@@ -2678,7 +2719,6 @@ async function loadGridMap() {
                                 Graphic,
                                 grids
                             );
-
 
                             resolve();
 
@@ -2712,7 +2752,6 @@ async function loadGridMap() {
             "[Map] Failed to load:",
             error
         );
-
 
         showMapError(
             error
@@ -2751,7 +2790,6 @@ function createGridMap(
             "project-map"
         );
 
-
     if (!mapContainer) {
 
         throw new Error(
@@ -2759,7 +2797,6 @@ function createGridMap(
         );
 
     }
-
 
     /*
      * Destroy previous map.
@@ -2785,10 +2822,8 @@ function createGridMap(
 
     }
 
-
     mapContainer.innerHTML =
         "";
-
 
     const map =
         new Map({
@@ -2796,6 +2831,11 @@ function createGridMap(
                 "gray-vector"
         });
 
+    /*
+     * --------------------------------------------------------
+     * GRID POLYGONS
+     * --------------------------------------------------------
+     */
 
     const graphicsLayer =
         new GraphicsLayer({
@@ -2805,11 +2845,44 @@ function createGridMap(
 
         });
 
-
     map.add(
         graphicsLayer
     );
 
+
+    /*
+     * --------------------------------------------------------
+     * GRID LABELS
+     * --------------------------------------------------------
+     *
+     * This is a second GraphicsLayer.
+     *
+     * We do NOT use LabelClass.
+     *
+     * Labels are normal TextSymbol graphics.
+     */
+
+    const labelGraphicsLayer =
+        new GraphicsLayer({
+
+            title:
+                "Grid Labels",
+
+            visible:
+                false
+
+        });
+
+    map.add(
+        labelGraphicsLayer
+    );
+
+
+    /*
+     * --------------------------------------------------------
+     * MAP VIEW
+     * --------------------------------------------------------
+     */
 
     const view =
         new MapView({
@@ -2830,7 +2903,6 @@ function createGridMap(
 
         });
 
-
     window.managerMap =
         map;
 
@@ -2840,11 +2912,53 @@ function createGridMap(
     window.managerGraphicsLayer =
         graphicsLayer;
 
+    window.managerLabelGraphicsLayer =
+        labelGraphicsLayer;
+
+
+    /*
+     * Render polygons.
+     */
 
     updateMapGraphics(
         Graphic,
         grids,
         true
+    );
+
+
+    /*
+     * Render grid labels.
+     */
+
+    updateGridLabels(
+        Graphic,
+        grids
+    );
+
+
+    /*
+     * Set initial label visibility.
+     */
+
+    updateGridLabelVisibility();
+
+
+    /*
+     * Watch map scale.
+     *
+     * Labels appear automatically when:
+     *
+     * scale <= 10,000
+     */
+
+    view.watch(
+        "scale",
+        () => {
+
+            updateGridLabelVisibility();
+
+        }
     );
 
 
@@ -2857,6 +2971,8 @@ function createGridMap(
         () => {
 
             zoomToGraphics();
+
+            updateGridLabelVisibility();
 
         },
         error => {
@@ -2896,7 +3012,6 @@ function renderMap(
 
     }
 
-
     if (
         !window.managerGraphicClass
     ) {
@@ -2909,12 +3024,18 @@ function renderMap(
 
     }
 
-
     updateMapGraphics(
         window.managerGraphicClass,
         grids,
         false
     );
+
+    updateGridLabels(
+        window.managerGraphicClass,
+        grids
+    );
+
+    updateGridLabelVisibility();
 
 }
 
@@ -2932,10 +3053,8 @@ function updateMapGraphics(
     const graphicsLayer =
         window.managerGraphicsLayer;
 
-
     const view =
         window.managerMapView;
-
 
     if (!graphicsLayer) {
 
@@ -2943,17 +3062,13 @@ function updateMapGraphics(
 
     }
 
-
     graphicsLayer.removeAll();
-
 
     let validGraphics =
         0;
 
-
     let missingGeometry =
         0;
-
 
     grids.forEach(
         grid => {
@@ -2964,7 +3079,6 @@ function updateMapGraphics(
                     grid.geom ??
                     grid.geom_json ??
                     grid.geometry;
-
 
                 if (!rawGeometry) {
 
@@ -2985,12 +3099,10 @@ function updateMapGraphics(
 
                 }
 
-
                 const geometry =
                     convertToArcGISGeometry(
                         rawGeometry
                     );
-
 
                 if (!geometry) {
 
@@ -3009,12 +3121,10 @@ function updateMapGraphics(
 
                 }
 
-
                 const symbol =
                     createGridSymbol(
                         grid
                     );
-
 
                 const graphic =
                     new Graphic({
@@ -3033,11 +3143,9 @@ function updateMapGraphics(
 
                     });
 
-
                 graphicsLayer.add(
                     graphic
                 );
-
 
                 validGraphics++;
 
@@ -3057,7 +3165,6 @@ function updateMapGraphics(
         }
     );
 
-
     console.log(
         "[Map] Render complete:",
         {
@@ -3075,7 +3182,6 @@ function updateMapGraphics(
         }
     );
 
-
     if (
         shouldZoom &&
         view &&
@@ -3091,6 +3197,475 @@ function updateMapGraphics(
 
 
 /* ==========================================================
+   GRID LABELS
+========================================================== */
+
+function updateGridLabels(
+    Graphic,
+    grids
+) {
+
+    const labelLayer =
+        window.managerLabelGraphicsLayer;
+
+    if (!labelLayer) {
+
+        return;
+
+    }
+
+    labelLayer.removeAll();
+
+    grids.forEach(
+        grid => {
+
+            try {
+
+                const rawGeometry =
+                    grid.geom ??
+                    grid.geom_json ??
+                    grid.geometry;
+
+                if (!rawGeometry) {
+
+                    return;
+
+                }
+
+                const geometry =
+                    convertToArcGISGeometry(
+                        rawGeometry
+                    );
+
+                if (!geometry) {
+
+                    return;
+
+                }
+
+                const labelPoint =
+                    getGeometryLabelPoint(
+                        geometry
+                    );
+
+                if (!labelPoint) {
+
+                    return;
+
+                }
+
+                const gridName =
+                    grid.grid_id ??
+                    grid.name ??
+                    grid.id ??
+                    "";
+
+                if (!String(gridName)) {
+
+                    return;
+
+                }
+
+                const graphic =
+                    new Graphic({
+
+                        geometry:
+                            labelPoint,
+
+                        attributes: {
+
+                            grid_id:
+                                String(
+                                    gridName
+                                )
+
+                        },
+
+                        symbol: {
+
+                            type:
+                                "text",
+
+                            text:
+                                String(
+                                    gridName
+                                ),
+
+                            color:
+                                "#111827",
+
+                            haloColor:
+                                "#ffffff",
+
+                            haloSize:
+                                1.5,
+
+                            font: {
+
+                                family:
+                                    "Arial",
+
+                                size:
+                                    10,
+
+                                weight:
+                                    "bold"
+
+                            },
+
+                            horizontalAlignment:
+                                "center",
+
+                            verticalAlignment:
+                                "middle",
+
+                            yoffset:
+                                0
+
+                        }
+
+                    });
+
+                labelLayer.add(
+                    graphic
+                );
+
+            }
+            catch (error) {
+
+                console.warn(
+                    "[Map Labels] Failed to create label:",
+                    error
+                );
+
+            }
+
+        }
+    );
+
+    updateGridLabelVisibility();
+
+    console.log(
+        `[Map Labels] Rendered ${labelLayer.graphics.length} labels`
+    );
+
+}
+
+
+/* ==========================================================
+   GRID LABEL VISIBILITY
+========================================================== */
+
+function updateGridLabelVisibility() {
+
+    const labelLayer =
+        window.managerLabelGraphicsLayer;
+
+    const view =
+        window.managerMapView;
+
+    if (
+        !labelLayer ||
+        !view
+    ) {
+
+        return;
+
+    }
+
+    /*
+     * Labels are visible at:
+     *
+     * 1:10,000
+     * 1:5,000
+     * 1:2,000
+     * etc.
+     *
+     * Labels are hidden at:
+     *
+     * 1:20,000
+     * 1:50,000
+     * etc.
+     */
+
+    const shouldShow =
+        Number.isFinite(
+            view.scale
+        ) &&
+        view.scale <=
+            GRID_LABEL_MIN_SCALE;
+
+    labelLayer.visible =
+        shouldShow;
+
+}
+
+
+/* ==========================================================
+   GET LABEL POINT
+========================================================== */
+
+function getGeometryLabelPoint(
+    geometry
+) {
+
+    if (!geometry) {
+
+        return null;
+
+    }
+
+
+    /*
+     * Point.
+     */
+
+    if (
+        geometry.type ===
+        "point"
+    ) {
+
+        return {
+
+            type:
+                "point",
+
+            x:
+                geometry.x,
+
+            y:
+                geometry.y,
+
+            spatialReference:
+                geometry.spatialReference || {
+                    wkid:
+                        4326
+                }
+
+        };
+
+    }
+
+
+    /*
+     * Polygon.
+     */
+
+    if (
+        geometry.type ===
+            "polygon" &&
+        Array.isArray(
+            geometry.rings
+        )
+    ) {
+
+        return getRingsCenter(
+            geometry.rings,
+            geometry.spatialReference
+        );
+
+    }
+
+
+    /*
+     * Polyline.
+     */
+
+    if (
+        geometry.type ===
+            "polyline" &&
+        Array.isArray(
+            geometry.paths
+        )
+    ) {
+
+        return getRingsCenter(
+            geometry.paths,
+            geometry.spatialReference
+        );
+
+    }
+
+
+    /*
+     * Multipoint.
+     */
+
+    if (
+        geometry.type ===
+            "multipoint" &&
+        Array.isArray(
+            geometry.points
+        )
+    ) {
+
+        return getRingsCenter(
+            [
+                geometry.points
+            ],
+            geometry.spatialReference
+        );
+
+    }
+
+    return null;
+
+}
+
+
+/* ==========================================================
+   GET RINGS CENTER
+========================================================== */
+
+function getRingsCenter(
+    rings,
+    spatialReference
+) {
+
+    if (
+        !Array.isArray(rings) ||
+        !rings.length
+    ) {
+
+        return null;
+
+    }
+
+    let minX =
+        Infinity;
+
+    let maxX =
+        -Infinity;
+
+    let minY =
+        Infinity;
+
+    let maxY =
+        -Infinity;
+
+
+    rings.forEach(
+        ring => {
+
+            if (
+                !Array.isArray(ring)
+            ) {
+
+                return;
+
+            }
+
+            ring.forEach(
+                coordinate => {
+
+                    if (
+                        !Array.isArray(
+                            coordinate
+                        ) ||
+                        coordinate.length <
+                            2
+                    ) {
+
+                        return;
+
+                    }
+
+                    const x =
+                        Number(
+                            coordinate[0]
+                        );
+
+                    const y =
+                        Number(
+                            coordinate[1]
+                        );
+
+                    if (
+                        !Number.isFinite(
+                            x
+                        ) ||
+                        !Number.isFinite(
+                            y
+                        )
+                    ) {
+
+                        return;
+
+                    }
+
+                    minX =
+                        Math.min(
+                            minX,
+                            x
+                        );
+
+                    maxX =
+                        Math.max(
+                            maxX,
+                            x
+                        );
+
+                    minY =
+                        Math.min(
+                            minY,
+                            y
+                        );
+
+                    maxY =
+                        Math.max(
+                            maxY,
+                            y
+                        );
+
+                }
+            );
+
+        }
+    );
+
+
+    if (
+        !Number.isFinite(minX) ||
+        !Number.isFinite(maxX) ||
+        !Number.isFinite(minY) ||
+        !Number.isFinite(maxY)
+    ) {
+
+        return null;
+
+    }
+
+    return {
+
+        type:
+            "point",
+
+        x:
+            (
+                minX +
+                maxX
+            ) /
+            2,
+
+        y:
+            (
+                minY +
+                maxY
+            ) /
+            2,
+
+        spatialReference:
+            spatialReference || {
+                wkid:
+                    4326
+            }
+
+    };
+
+}
+
+
+/* ==========================================================
    ZOOM
 ========================================================== */
 
@@ -3099,10 +3674,8 @@ function zoomToGraphics() {
     const view =
         window.managerMapView;
 
-
     const graphicsLayer =
         window.managerGraphicsLayer;
-
 
     if (
         !view ||
@@ -3113,7 +3686,6 @@ function zoomToGraphics() {
         return;
 
     }
-
 
     view.goTo(
         graphicsLayer.graphics.toArray(),
@@ -3155,7 +3727,6 @@ function convertToArcGISGeometry(
 
     }
 
-
     /*
      * JSON string.
      */
@@ -3168,13 +3739,11 @@ function convertToArcGISGeometry(
         const trimmed =
             geometry.trim();
 
-
         if (!trimmed) {
 
             return null;
 
         }
-
 
         try {
 
@@ -3197,13 +3766,11 @@ function convertToArcGISGeometry(
 
     }
 
-
     if (!geometry) {
 
         return null;
 
     }
-
 
     /*
      * GeoJSON Feature.
@@ -3220,9 +3787,9 @@ function convertToArcGISGeometry(
 
     }
 
-
     /*
-     * FeatureCollection.
+     * FeatureCollection cannot represent
+     * a single ArcGIS Graphic directly.
      */
 
     if (
@@ -3233,7 +3800,6 @@ function convertToArcGISGeometry(
         return null;
 
     }
-
 
     /*
      * GeoJSON.
@@ -3249,13 +3815,11 @@ function convertToArcGISGeometry(
                 geometry.coordinates
             );
 
-
         case "MultiPoint":
 
             return convertGeoJSONMultiPoint(
                 geometry.coordinates
             );
-
 
         case "LineString":
 
@@ -3263,20 +3827,17 @@ function convertToArcGISGeometry(
                 geometry.coordinates
             );
 
-
         case "MultiLineString":
 
             return convertGeoJSONMultiLineString(
                 geometry.coordinates
             );
 
-
         case "Polygon":
 
             return convertGeoJSONPolygon(
                 geometry.coordinates
             );
-
 
         case "MultiPolygon":
 
@@ -3285,7 +3846,6 @@ function convertToArcGISGeometry(
             );
 
     }
-
 
     /*
      * Already ArcGIS polygon.
@@ -3315,7 +3875,6 @@ function convertToArcGISGeometry(
 
     }
 
-
     /*
      * Already ArcGIS polyline.
      */
@@ -3343,7 +3902,6 @@ function convertToArcGISGeometry(
         };
 
     }
-
 
     /*
      * Already ArcGIS multipoint.
@@ -3373,7 +3931,6 @@ function convertToArcGISGeometry(
 
     }
 
-
     /*
      * Already ArcGIS point.
      */
@@ -3393,7 +3950,6 @@ function convertToArcGISGeometry(
                 geometry.y
             );
 
-
         if (
             !Number.isFinite(x) ||
             !Number.isFinite(y)
@@ -3402,7 +3958,6 @@ function convertToArcGISGeometry(
             return null;
 
         }
-
 
         return {
 
@@ -3425,12 +3980,10 @@ function convertToArcGISGeometry(
 
     }
 
-
     console.warn(
         "[Geometry] Unknown format:",
         geometry
     );
-
 
     return null;
 
@@ -3454,7 +4007,6 @@ function convertGeoJSONPoint(
 
     }
 
-
     const x =
         Number(
             coordinates[0]
@@ -3465,7 +4017,6 @@ function convertGeoJSONPoint(
             coordinates[1]
         );
 
-
     if (
         !Number.isFinite(x) ||
         !Number.isFinite(y)
@@ -3474,7 +4025,6 @@ function convertGeoJSONPoint(
         return null;
 
     }
-
 
     return {
 
@@ -3513,7 +4063,6 @@ function convertGeoJSONMultiPoint(
 
     }
 
-
     return {
 
         type:
@@ -3547,7 +4096,6 @@ function convertGeoJSONLineString(
         return null;
 
     }
-
 
     return {
 
@@ -3584,7 +4132,6 @@ function convertGeoJSONMultiLineString(
 
     }
 
-
     return {
 
         type:
@@ -3620,7 +4167,6 @@ function convertGeoJSONPolygon(
 
     }
 
-
     return {
 
         type:
@@ -3655,9 +4201,7 @@ function convertGeoJSONMultiPolygon(
 
     }
 
-
     const rings = [];
-
 
     coordinates.forEach(
         polygon => {
@@ -3669,7 +4213,6 @@ function convertGeoJSONMultiPolygon(
                 return;
 
             }
-
 
             polygon.forEach(
                 ring => {
@@ -3690,13 +4233,11 @@ function convertGeoJSONMultiPolygon(
         }
     );
 
-
     if (!rings.length) {
 
         return null;
 
     }
-
 
     return {
 
@@ -3728,7 +4269,6 @@ function createGridSymbol(
         window.managerMapRenderMode ||
         "status";
 
-
     if (
         mode === "user"
     ) {
@@ -3738,7 +4278,6 @@ function createGridSymbol(
         );
 
     }
-
 
     return createStatusSymbol(
         grid
@@ -3759,16 +4298,13 @@ function handleMapRenderModeChanged(
         event.target.value ||
         "status";
 
-
     window.managerMapRenderMode =
         value;
-
 
     console.log(
         "[Map] Render mode changed:",
         value
     );
-
 
     renderMap(
         window.managerFilteredMapGrids
@@ -3791,7 +4327,6 @@ function createStatusSymbol(
             grid.status_display ||
             "to_do"
         );
-
 
     switch (status) {
 
@@ -3827,7 +4362,6 @@ function createStatusSymbol(
 
             };
 
-
         case "in_progress":
 
             return {
@@ -3858,7 +4392,6 @@ function createStatusSymbol(
 
             };
 
-
         case "blocked":
 
             return {
@@ -3888,7 +4421,6 @@ function createStatusSymbol(
                 }
 
             };
-
 
         case "to_do":
 
@@ -3941,12 +4473,10 @@ function createUserSymbol(
         grid.assigned_to_name ??
         "unassigned";
 
-
     const color =
         getUserColor(
             String(user)
         );
-
 
     return {
 
@@ -4019,10 +4549,8 @@ function getUserColor(
 
     ];
 
-
     let hash =
         0;
-
 
     for (
         let i = 0;
@@ -4037,7 +4565,6 @@ function getUserColor(
             ) >>> 0;
 
     }
-
 
     return palette[
         hash %
@@ -4171,13 +4698,11 @@ function showMapError(
             "project-map"
         );
 
-
     if (!mapContainer) {
 
         return;
 
     }
-
 
     if (
         mapContainer.querySelector(
@@ -4189,13 +4714,11 @@ function showMapError(
 
     }
 
-
     const message =
         error &&
         error.message
             ? error.message
             : "Unable to load the map.";
-
 
     mapContainer.innerHTML = `
 
@@ -4251,10 +4774,8 @@ function formatDate(
 
     }
 
-
     const date =
         new Date(value);
-
 
     if (
         Number.isNaN(
@@ -4265,7 +4786,6 @@ function formatDate(
         return "-";
 
     }
-
 
     return date.toLocaleDateString();
 
@@ -4285,10 +4805,8 @@ function escapeHtml(
             "div"
         );
 
-
     div.textContent =
         value ?? "";
-
 
     return div.innerHTML;
 
