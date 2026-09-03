@@ -86,12 +86,14 @@ async function fetchApi(url) {
         `[API] Loading: ${url}`
     );
 
+
     const response =
         await fetch(
             url,
             {
                 headers: {
-                    "Accept": "application/json"
+                    "Accept":
+                        "application/json"
                 },
 
                 credentials:
@@ -168,124 +170,80 @@ async function loadDashboard() {
     try {
 
         console.log(
-            "[Dashboard] Loading dashboard..."
+            "[Dashboard] Loading authorities..."
         );
 
 
         /*
          * IMPORTANT:
          *
-         * There is now only ONE grid API.
+         * We intentionally DO NOT load all grids
+         * here.
          *
-         * The same grid data is used for:
-         *
-         * - Grid table
-         * - Filters
-         * - Map
+         * This prevents the large Grid API response
+         * from consuming Render's memory.
          */
 
-        const [
-            authorities,
-            grids,
-            reviews
-        ] = await Promise.all([
-
-            fetchApi(
-                AUTHORITY_API_URL
-            ),
-
-            fetchApi(
-                GRID_API_URL
-            ),
-
-            fetchApi(
-                REVIEW_API_URL
-            )
-
-        ]);
-
-
         window.managerAuthorities =
-            authorities;
-
-        window.managerGrids =
-            grids;
-
-        window.managerReviews =
-            reviews;
+            await fetchApi(
+                AUTHORITY_API_URL
+            );
 
 
         console.log(
-            "[Dashboard] Loaded:",
-            {
-                authorities:
-                    authorities.length,
-
-                grids:
-                    grids.length,
-
-                reviews:
-                    reviews.length
-            }
-        );
-
-
-        console.log(
-            "[Dashboard] First grid:",
-            grids[0]
+            "[Dashboard] Authorities loaded:",
+            window.managerAuthorities.length
         );
 
 
         /*
          * Create filter controls.
+         *
+         * Authority options are populated from
+         * the Authority API, not from grids.
          */
 
         createFilterNavbar();
 
 
         /*
-         * Initial filtering.
+         * Default Authority.
          */
 
-        window.managerFilteredGrids =
-            getFilteredGrids();
-
-        window.managerFilteredMapGrids =
-            window.managerFilteredGrids;
-
-
-        /*
-         * Initial dashboard rendering.
-         */
-
-        const filteredAuthorities =
-            getFilteredAuthorities(
-                window.managerFilteredGrids
+        const selected =
+            setDefaultAuthorityFilter(
+                "Richmondshire"
             );
 
 
-        renderSummary(
-            filteredAuthorities
-        );
+        if (!selected) {
 
-        renderAuthorities(
-            filteredAuthorities
-        );
+            console.warn(
+                "[Dashboard] Richmondshire not found."
+            );
 
-        renderGrids(
-            window.managerFilteredGrids
-        );
 
-        renderReviews(
-            window.managerReviews
-        );
+            /*
+             * If Richmondshire doesn't exist,
+             * leave the authority filter empty.
+             */
+
+            window.managerFilters.authority =
+                "";
+
+        }
 
 
         /*
-         * Load map.
+         * Load only the selected authority.
          */
 
-        await loadGridMap();
+        await loadFilteredDashboard();
+
+
+        console.log(
+            "[Dashboard] Initialization complete."
+        );
 
     }
     catch (error) {
@@ -305,12 +263,6 @@ async function loadDashboard() {
 ========================================================== */
 
 function createFilterNavbar() {
-
-    /*
-     * Filter bar already exists in HTML.
-     *
-     * Do NOT create another one.
-     */
 
     const filterBar =
         document.getElementById(
@@ -356,10 +308,17 @@ function createFilterNavbar() {
 
 
     /*
-     * Populate dynamic options.
+     * Populate Authority first.
      */
 
-    populateFilterOptions();
+    populateAuthorityOptions();
+
+
+    /*
+     * Other options will be populated
+     * after the selected authority's grids
+     * have been loaded.
+     */
 
 
     /* ======================================================
@@ -445,32 +404,18 @@ function createFilterNavbar() {
 
 
 /* ==========================================================
-   POPULATE FILTER OPTIONS
+   AUTHORITY OPTIONS
 ========================================================== */
 
-function populateFilterOptions() {
+function populateAuthorityOptions() {
 
     const authoritySelect =
         document.getElementById(
             "filter-authority"
         );
 
-    const statusSelect =
-        document.getElementById(
-            "filter-status"
-        );
 
-    const userSelect =
-        document.getElementById(
-            "filter-user"
-        );
-
-
-    if (
-        !authoritySelect ||
-        !statusSelect ||
-        !userSelect
-    ) {
+    if (!authoritySelect) {
 
         return;
 
@@ -479,64 +424,6 @@ function populateFilterOptions() {
 
     const currentAuthority =
         window.managerFilters.authority;
-
-    const currentStatus =
-        window.managerFilters.status;
-
-    const currentUser =
-        window.managerFilters.user;
-
-
-    /* ======================================================
-       AUTHORITY OPTIONS
-    ====================================================== */
-
-    const authorities =
-        new Map();
-
-
-    window.managerGrids.forEach(
-        grid => {
-
-            const id =
-                grid.authority_id ??
-                grid.authority;
-
-            const name =
-                grid.authority_name ??
-                grid.authority_name_display;
-
-
-            if (!name) {
-
-                return;
-
-            }
-
-
-            const key =
-                id !== undefined &&
-                id !== null
-                    ? String(id)
-                    : String(name);
-
-
-            authorities.set(
-                key,
-                {
-                    id:
-                        id !== undefined &&
-                        id !== null
-                            ? String(id)
-                            : String(name),
-
-                    name:
-                        String(name)
-                }
-            );
-
-        }
-    );
 
 
     authoritySelect.innerHTML = `
@@ -548,38 +435,91 @@ function populateFilterOptions() {
     `;
 
 
-    [...authorities.values()]
-        .sort(
-            (a, b) =>
-                a.name.localeCompare(
-                    b.name
-                )
-        )
-        .forEach(
-            authority => {
+    const authorities =
+        [...window.managerAuthorities]
+            .sort(
+                (a, b) =>
+                    String(
+                        a.name || ""
+                    ).localeCompare(
+                        String(
+                            b.name || ""
+                        )
+                    )
+            );
 
-                const option =
-                    document.createElement(
-                        "calcite-option"
-                    );
 
-                option.value =
-                    authority.id;
+    authorities.forEach(
+        authority => {
 
-                option.textContent =
-                    authority.name;
+            if (
+                authority.id === undefined ||
+                authority.id === null
+            ) {
 
-                authoritySelect.appendChild(
-                    option
-                );
+                return;
 
             }
+
+
+            const option =
+                document.createElement(
+                    "calcite-option"
+                );
+
+
+            option.value =
+                String(
+                    authority.id
+                );
+
+
+            option.textContent =
+                String(
+                    authority.name || ""
+                );
+
+
+            authoritySelect.appendChild(
+                option
+            );
+
+        }
+    );
+
+
+    /*
+     * Restore existing selection.
+     */
+
+    authoritySelect.value =
+        currentAuthority || "";
+
+}
+
+
+/* ==========================================================
+   STATUS OPTIONS
+========================================================== */
+
+function populateStatusOptions() {
+
+    const statusSelect =
+        document.getElementById(
+            "filter-status"
         );
 
 
-    /* ======================================================
-       STATUS OPTIONS
-    ====================================================== */
+    if (!statusSelect) {
+
+        return;
+
+    }
+
+
+    const currentStatus =
+        window.managerFilters.status;
+
 
     const statuses =
         new Map();
@@ -596,7 +536,7 @@ function populateFilterOptions() {
 
 
             const value =
-                String(
+                normalizeStatus(
                     grid.status
                 );
 
@@ -641,11 +581,14 @@ function populateFilterOptions() {
                         "calcite-option"
                     );
 
+
                 option.value =
                     value;
 
+
                 option.textContent =
                     label;
+
 
                 statusSelect.appendChild(
                     option
@@ -655,9 +598,34 @@ function populateFilterOptions() {
         );
 
 
-    /* ======================================================
-       USER OPTIONS
-    ====================================================== */
+    statusSelect.value =
+        currentStatus || "";
+
+}
+
+
+/* ==========================================================
+   USER OPTIONS
+========================================================== */
+
+function populateUserOptions() {
+
+    const userSelect =
+        document.getElementById(
+            "filter-user"
+        );
+
+
+    if (!userSelect) {
+
+        return;
+
+    }
+
+
+    const currentUser =
+        window.managerFilters.user;
+
 
     const users =
         new Map();
@@ -669,6 +637,7 @@ function populateFilterOptions() {
             const id =
                 grid.assigned_to_id ??
                 grid.assigned_to;
+
 
             const name =
                 grid.assigned_to_name ??
@@ -736,11 +705,14 @@ function populateFilterOptions() {
                         "calcite-option"
                     );
 
+
                 option.value =
                     user.id;
 
+
                 option.textContent =
                     user.name;
+
 
                 userSelect.appendChild(
                     option
@@ -750,56 +722,95 @@ function populateFilterOptions() {
         );
 
 
-    /* ======================================================
-       RESTORE CURRENT FILTERS
-    ====================================================== */
-
-    authoritySelect.value =
-        currentAuthority || "";
-
-    statusSelect.value =
-        currentStatus || "";
-
     userSelect.value =
         currentUser || "";
 
+}
 
-    /*
-     * If a previous selection no longer exists,
-     * reset it.
-     */
+
+/* ==========================================================
+   SET DEFAULT AUTHORITY
+========================================================== */
+
+function setDefaultAuthorityFilter(
+    authorityName
+) {
+
+    const authority =
+        window.managerAuthorities.find(
+            item =>
+                String(
+                    item.name || ""
+                )
+                    .trim()
+                    .toLowerCase() ===
+                String(
+                    authorityName
+                )
+                    .trim()
+                    .toLowerCase()
+        );
+
+
+    if (!authority) {
+
+        return false;
+
+    }
+
 
     if (
-        authoritySelect.value !==
-        currentAuthority
+        authority.id === undefined ||
+        authority.id === null
     ) {
 
-        window.managerFilters.authority =
-            "";
+        console.warn(
+            "[Filters] Authority has no ID:",
+            authority
+        );
+
+        return false;
 
     }
 
 
-    if (
-        statusSelect.value !==
-        currentStatus
-    ) {
+    const authorityId =
+        String(
+            authority.id
+        );
 
-        window.managerFilters.status =
-            "";
+
+    window.managerFilters.authority =
+        authorityId;
+
+
+    const authoritySelect =
+        document.getElementById(
+            "filter-authority"
+        );
+
+
+    if (authoritySelect) {
+
+        authoritySelect.value =
+            authorityId;
 
     }
 
 
-    if (
-        userSelect.value !==
-        currentUser
-    ) {
+    console.log(
+        "[Filters] Default authority:",
+        {
+            name:
+                authority.name,
 
-        window.managerFilters.user =
-            "";
+            id:
+                authorityId
+        }
+    );
 
-    }
+
+    return true;
 
 }
 
@@ -855,7 +866,7 @@ function normalizeStatus(
    FILTER CHANGE
 ========================================================== */
 
-function handleFiltersChanged(
+async function handleFiltersChanged(
     event
 ) {
 
@@ -916,7 +927,7 @@ function handleFiltersChanged(
     );
 
 
-    refreshFilteredDashboard();
+    await loadFilteredDashboard();
 
 }
 
@@ -925,21 +936,28 @@ function handleFiltersChanged(
    RESET FILTERS
 ========================================================== */
 
-function resetFilters() {
+async function resetFilters() {
 
-    window.managerFilters = {
+    /*
+     * Reset to Richmondshire instead of
+     * loading every grid.
+     */
 
-        authority: "",
-        status: "",
-        user: ""
+    window.managerFilters.status =
+        "";
 
-    };
+    window.managerFilters.user =
+        "";
 
 
-    const authoritySelect =
-        document.getElementById(
-            "filter-authority"
-        );
+    /*
+     * Restore Richmondshire as default.
+     */
+
+    setDefaultAuthorityFilter(
+        "Richmondshire"
+    );
+
 
     const statusSelect =
         document.getElementById(
@@ -950,14 +968,6 @@ function resetFilters() {
         document.getElementById(
             "filter-user"
         );
-
-
-    if (authoritySelect) {
-
-        authoritySelect.value =
-            "";
-
-    }
 
 
     if (statusSelect) {
@@ -977,332 +987,241 @@ function resetFilters() {
 
 
     console.log(
-        "[Filters] Reset"
+        "[Filters] Reset to Richmondshire"
     );
 
 
-    refreshFilteredDashboard();
+    await loadFilteredDashboard();
 
 }
 
 
 /* ==========================================================
-   AUTHORITY MATCH
+   LOAD FILTERED DASHBOARD
 ========================================================== */
 
-function matchesAuthority(
-    grid,
-    selectedAuthority
-) {
+async function loadFilteredDashboard() {
 
-    if (!selectedAuthority) {
+    const authority =
+        window.managerFilters.authority;
 
-        return true;
+    const status =
+        window.managerFilters.status;
 
-    }
-
-
-    const selected =
-        String(
-            selectedAuthority
-        );
-
-
-    const gridAuthorityId =
-        grid.authority_id ??
-        grid.authority;
-
-
-    const gridAuthorityName =
-        grid.authority_name ??
-        grid.authority_name_display;
+    const user =
+        window.managerFilters.user;
 
 
     /*
-     * Match ID.
+     * --------------------------------------------------------
+     * GRID QUERY
+     * --------------------------------------------------------
      */
 
-    if (
-        gridAuthorityId !== undefined &&
-        gridAuthorityId !== null &&
-        String(gridAuthorityId) === selected
-    ) {
-
-        return true;
-
-    }
+    const gridParams =
+        new URLSearchParams();
 
 
-    /*
-     * Match name.
-     */
+    if (authority) {
 
-    if (
-        gridAuthorityName &&
-        String(gridAuthorityName) === selected
-    ) {
-
-        return true;
-
-    }
-
-
-    /*
-     * If selected value is an ID but this
-     * grid only has authority name, find
-     * the authority name from another grid.
-     */
-
-    const sourceGrid =
-        window.managerGrids.find(
-            item => {
-
-                const id =
-                    item.authority_id ??
-                    item.authority;
-
-                return (
-                    id !== undefined &&
-                    id !== null &&
-                    String(id) === selected
-                );
-
-            }
-        );
-
-
-    if (
-        sourceGrid &&
-        gridAuthorityName &&
-        sourceGrid.authority_name
-    ) {
-
-        return (
-            String(gridAuthorityName) ===
-            String(sourceGrid.authority_name)
-        );
-
-    }
-
-
-    return false;
-
-}
-
-
-/* ==========================================================
-   USER MATCH
-========================================================== */
-
-function matchesUser(
-    grid,
-    selectedUser
-) {
-
-    if (!selectedUser) {
-
-        return true;
-
-    }
-
-
-    const selected =
-        String(
-            selectedUser
-        );
-
-
-    const gridUserId =
-        grid.assigned_to_id ??
-        grid.assigned_to;
-
-
-    const gridUserName =
-        grid.assigned_to_name ??
-        grid.assigned_to_name_display;
-
-
-    /*
-     * Match ID.
-     */
-
-    if (
-        gridUserId !== undefined &&
-        gridUserId !== null &&
-        String(gridUserId) === selected
-    ) {
-
-        return true;
-
-    }
-
-
-    /*
-     * Match name.
-     */
-
-    if (
-        gridUserName &&
-        String(gridUserName) === selected
-    ) {
-
-        return true;
-
-    }
-
-
-    /*
-     * If selected user is an ID but the
-     * grid only exposes the name, resolve
-     * the name from another grid.
-     */
-
-    const sourceGrid =
-        window.managerGrids.find(
-            item => {
-
-                const id =
-                    item.assigned_to_id ??
-                    item.assigned_to;
-
-                return (
-                    id !== undefined &&
-                    id !== null &&
-                    String(id) === selected
-                );
-
-            }
-        );
-
-
-    if (
-        sourceGrid &&
-        gridUserName &&
-        sourceGrid.assigned_to_name
-    ) {
-
-        return (
-            String(gridUserName) ===
-            String(sourceGrid.assigned_to_name)
-        );
-
-    }
-
-
-    return false;
-
-}
-
-
-/* ==========================================================
-   GRID MATCH
-========================================================== */
-
-function gridMatchesFilters(
-    grid
-) {
-
-    const {
-        authority,
-        status,
-        user
-    } = window.managerFilters;
-
-
-    /* ======================================================
-       AUTHORITY
-    ====================================================== */
-
-    if (
-        authority &&
-        !matchesAuthority(
-            grid,
+        gridParams.set(
+            "authority",
             authority
-        )
-    ) {
-
-        return false;
+        );
 
     }
 
-
-    /* ======================================================
-       STATUS
-    ====================================================== */
 
     if (status) {
 
-        const gridStatus =
-            normalizeStatus(
-                grid.status ||
-                grid.status_display
-            );
+        gridParams.set(
+            "status",
+            status
+        );
+
+    }
 
 
-        const selectedStatus =
-            normalizeStatus(
-                status
-            );
+    if (user) {
 
+        gridParams.set(
+            "assigned_to",
+            user
+        );
+
+    }
+
+
+    const gridUrl =
+        gridParams.toString()
+            ? `${GRID_API_URL}?${gridParams.toString()}`
+            : GRID_API_URL;
+
+
+    /*
+     * --------------------------------------------------------
+     * REVIEW QUERY
+     * --------------------------------------------------------
+     *
+     * Reviews currently support Authority only
+     * in your Django ViewSet.
+     */
+
+    const reviewParams =
+        new URLSearchParams();
+
+
+    if (authority) {
+
+        reviewParams.set(
+            "authority",
+            authority
+        );
+
+    }
+
+
+    const reviewUrl =
+        reviewParams.toString()
+            ? `${REVIEW_API_URL}?${reviewParams.toString()}`
+            : REVIEW_API_URL;
+
+
+    try {
+
+        console.log(
+            "[Dashboard] Loading filtered data:",
+            {
+                gridUrl,
+                reviewUrl
+            }
+        );
+
+
+        /*
+         * Do NOT load grids until the
+         * authority is known.
+         */
+
+        const [
+            grids,
+            reviews
+        ] = await Promise.all([
+
+            fetchApi(
+                gridUrl
+            ),
+
+            fetchApi(
+                reviewUrl
+            )
+
+        ]);
+
+
+        window.managerGrids =
+            grids;
+
+        window.managerReviews =
+            reviews;
+
+
+        window.managerFilteredGrids =
+            grids;
+
+        window.managerFilteredMapGrids =
+            grids;
+
+
+        console.log(
+            "[Dashboard] Filtered data loaded:",
+            {
+                grids:
+                    grids.length,
+
+                reviews:
+                    reviews.length
+            }
+        );
+
+
+        /*
+         * Build Status/User options from
+         * the currently loaded grids only.
+         */
+
+        populateStatusOptions();
+
+        populateUserOptions();
+
+
+        /*
+         * Authority table.
+         *
+         * When an authority is selected, show
+         * only that authority.
+         */
+
+        const filteredAuthorities =
+            getFilteredAuthorities();
+
+
+        renderSummary(
+            filteredAuthorities
+        );
+
+
+        renderAuthorities(
+            filteredAuthorities
+        );
+
+
+        /*
+         * Grid table.
+         */
+
+        renderGrids(
+            grids
+        );
+
+
+        /*
+         * Reviews.
+         */
+
+        renderReviews(
+            reviews
+        );
+
+
+        /*
+         * Map.
+         */
 
         if (
-            gridStatus !==
-            selectedStatus
+            window.managerMapView
         ) {
 
-            return false;
+            renderMap(
+                grids
+            );
+
+        }
+        else {
+
+            await loadGridMap();
 
         }
 
     }
+    catch (error) {
 
-
-    /* ======================================================
-       USER
-    ====================================================== */
-
-    if (
-        user &&
-        !matchesUser(
-            grid,
-            user
-        )
-    ) {
-
-        return false;
-
-    }
-
-
-    return true;
-
-}
-
-
-/* ==========================================================
-   FILTER GRIDS
-========================================================== */
-
-function getFilteredGrids() {
-
-    const result =
-        window.managerGrids.filter(
-            grid =>
-                gridMatchesFilters(
-                    grid
-                )
+        console.error(
+            "[Dashboard] Filtered load failed:",
+            error
         );
 
-
-    console.log(
-        "[Filters] Grids:",
-        result.length,
-        "/",
-        window.managerGrids.length
-    );
-
-
-    return result;
+    }
 
 }
 
@@ -1311,140 +1230,35 @@ function getFilteredGrids() {
    FILTERED AUTHORITIES
 ========================================================== */
 
-function getFilteredAuthorities(
-    filteredGrids = null
-) {
+function getFilteredAuthorities() {
+
+    const authority =
+        window.managerFilters.authority;
+
 
     /*
-     * No filters:
-     * return all authorities.
+     * No Authority selected.
+     *
+     * This is technically capable of loading all
+     * authorities, but the initial dashboard uses
+     * Richmondshire.
      */
 
-    if (
-        !filteredGrids &&
-        !window.managerFilters.authority &&
-        !window.managerFilters.status &&
-        !window.managerFilters.user
-    ) {
+    if (!authority) {
 
         return window.managerAuthorities;
 
     }
 
 
-    const grids =
-        filteredGrids ??
-        getFilteredGrids();
-
-
-    const names =
-        new Set();
-
-
-    grids.forEach(
-        grid => {
-
-            const name =
-                grid.authority_name;
-
-
-            if (name) {
-
-                names.add(
-                    String(name)
-                );
-
-            }
-
-        }
-    );
-
-
-    if (!names.size) {
-
-        return [];
-
-    }
-
-
     return window.managerAuthorities.filter(
-        authority => {
-
-            const name =
-                authority.name;
-
-
-            return (
-                name &&
-                names.has(
-                    String(name)
-                )
-            );
-
-        }
-    );
-
-}
-
-
-/* ==========================================================
-   REFRESH DASHBOARD
-========================================================== */
-
-function refreshFilteredDashboard() {
-
-    const filteredGrids =
-        getFilteredGrids();
-
-
-    /*
-     * IMPORTANT:
-     *
-     * The map now uses EXACTLY the same
-     * filtered grid collection as the table.
-     */
-
-    window.managerFilteredGrids =
-        filteredGrids;
-
-    window.managerFilteredMapGrids =
-        filteredGrids;
-
-
-    /* ======================================================
-       GRID TABLE
-    ====================================================== */
-
-    renderGrids(
-        filteredGrids
-    );
-
-
-    /* ======================================================
-       AUTHORITIES
-    ====================================================== */
-
-    const filteredAuthorities =
-        getFilteredAuthorities(
-            filteredGrids
-        );
-
-
-    renderSummary(
-        filteredAuthorities
-    );
-
-    renderAuthorities(
-        filteredAuthorities
-    );
-
-
-    /* ======================================================
-       MAP
-    ====================================================== */
-
-    renderMap(
-        filteredGrids
+        item =>
+            String(
+                item.id
+            ) ===
+            String(
+                authority
+            )
     );
 
 }
@@ -1811,7 +1625,7 @@ function renderGrids(
 
         tbody.innerHTML = `
             <tr>
-                <td colspan="11">
+                <td colspan="12">
                     No grids found.
                 </td>
             </tr>
@@ -1844,7 +1658,12 @@ function renderGrids(
                       100
                     : 0;
 
-            const estimated_day_to_word = grid.estimated_completion_day
+
+            const estimatedDayToWord =
+                grid.estimated_completion_day ??
+                "-";
+
+
             const row =
                 document.createElement(
                     "tr"
@@ -1921,9 +1740,13 @@ function renderGrids(
                         grid.complete_date
                     )}
                 </td>
+
                 <td>
-                    ${estimated_day_to_word}
+                    ${escapeHtml(
+                        estimatedDayToWord
+                    )}
                 </td>
+
                 <td>
 
                     <button
@@ -2018,7 +1841,9 @@ function editGridRow(
             <option
                 value="to_do"
                 ${
-                    grid.status === "to_do"
+                    normalizeStatus(
+                        grid.status
+                    ) === "to_do"
                         ? "selected"
                         : ""
                 }
@@ -2029,7 +1854,9 @@ function editGridRow(
             <option
                 value="blocked"
                 ${
-                    grid.status === "blocked"
+                    normalizeStatus(
+                        grid.status
+                    ) === "blocked"
                         ? "selected"
                         : ""
                 }
@@ -2040,7 +1867,9 @@ function editGridRow(
             <option
                 value="in_progress"
                 ${
-                    grid.status === "in_progress"
+                    normalizeStatus(
+                        grid.status
+                    ) === "in_progress"
                         ? "selected"
                         : ""
                 }
@@ -2051,7 +1880,9 @@ function editGridRow(
             <option
                 value="done"
                 ${
-                    grid.status === "done"
+                    normalizeStatus(
+                        grid.status
+                    ) === "done"
                         ? "selected"
                         : ""
                 }
@@ -2112,6 +1943,7 @@ async function saveGridRow(
         row.querySelector(
             ".grid-edit-km"
         );
+
 
     const statusInput =
         row.querySelector(
@@ -2229,12 +2061,6 @@ async function saveGridRow(
             await response.json();
 
 
-        /*
-         * Update the single grid in local memory.
-         *
-         * No second grid-map API call.
-         */
-
         const index =
             window.managerGrids.findIndex(
                 item =>
@@ -2252,18 +2078,11 @@ async function saveGridRow(
 
 
         /*
-         * Rebuild filters in case
-         * assignment/status changed.
+         * Reload the currently selected filters
+         * from the backend.
          */
 
-        populateFilterOptions();
-
-
-        /*
-         * Reapply current filters.
-         */
-
-        refreshFilteredDashboard();
+        await loadFilteredDashboard();
 
     }
     catch (error) {
@@ -2618,17 +2437,53 @@ async function saveReviewRow(
     }
 
 
+    const day =
+        Number(
+            dayInput.value
+        );
+
+
+    const kmReviewed =
+        Number(
+            kmInput.value
+        );
+
+
+    if (
+        !Number.isFinite(day) ||
+        day < 1
+    ) {
+
+        alert(
+            "Please enter a valid review day."
+        );
+
+        return;
+
+    }
+
+
+    if (
+        !Number.isFinite(kmReviewed) ||
+        kmReviewed < 0
+    ) {
+
+        alert(
+            "Please enter a valid reviewed KM."
+        );
+
+        return;
+
+    }
+
+
     const payload = {
 
         day:
-            Number(
-                dayInput.value
-            ),
+            day,
 
         total_km_reviewed:
-            Number(
-                kmInput.value
-            )
+            kmReviewed
 
     };
 
@@ -2696,43 +2551,14 @@ async function saveReviewRow(
         }
 
 
-        const updatedReview =
-            await response.json();
-
-
-        const index =
-            window.managerReviews.findIndex(
-                item =>
-                    String(item.id) ===
-                    String(reviewId)
-            );
-
-
-        if (index !== -1) {
-
-            window.managerReviews[index] =
-                updatedReview;
-
-        }
-
-
         /*
-         * Refresh authority data because
-         * review statistics may have changed.
+         * We don't need to reload ALL authorities.
+         *
+         * Reload only the currently selected
+         * authority's reviews/grids.
          */
 
-        window.managerAuthorities =
-            await fetchApi(
-                AUTHORITY_API_URL
-            );
-
-
-        renderReviews(
-            window.managerReviews
-        );
-
-
-        refreshFilteredDashboard();
+        await loadFilteredDashboard();
 
     }
     catch (error) {
@@ -2809,15 +2635,13 @@ async function loadGridMap() {
 
 
         /*
-         * SAME DATASET AS TABLE.
+         * IMPORTANT:
+         *
+         * This is the already-filtered dataset.
          */
 
         const grids =
-            getFilteredGrids();
-
-
-        window.managerFilteredMapGrids =
-            grids;
+            window.managerFilteredMapGrids;
 
 
         await new Promise(
@@ -3398,8 +3222,7 @@ function convertToArcGISGeometry(
 
 
     /*
-     * FeatureCollection cannot represent
-     * one grid directly.
+     * FeatureCollection.
      */
 
     if (

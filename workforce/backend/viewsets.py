@@ -241,9 +241,7 @@ class ManagerGridViewSet(viewsets.ModelViewSet):
 # REVIEW VIEWSET
 # ==========================================================
 
-class ManagerReviewViewSet(
-    viewsets.ModelViewSet
-):
+class ManagerReviewViewSet(viewsets.ModelViewSet):
 
     serializer_class = ManagerReviewSerializer
 
@@ -289,9 +287,7 @@ class ManagerReviewViewSet(
 # EMPLOYEE VIEWSET
 # ==========================================================
 
-class ManagerEmployeeViewSet(
-    viewsets.ReadOnlyModelViewSet
-):
+class ManagerEmployeeViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Manager Employee / Workload API.
 
